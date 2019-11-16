@@ -122,24 +122,6 @@ impl IrBuilder {
             }
         }
 
-        /*
-        match self.try_get_id(FunctionSource::from((newfid, funcid))) {
-            None => {
-                // TODO: This is invalid if we've got generics.
-                let findex = self.gen_id(newfid, funcid);
-                let entry = self.token_to_ir(newfid, funcid, &source.func(&self.parser).body.inner);
-                self.complete(findex, entry);
-            }
-            Some(findex) => {
-                if self.should_replace(findex) {
-                    let entry =
-                        self.token_to_ir(newfid, funcid, &source.func(&self.parser).body.inner);
-                    self.complete(findex, entry);
-                }
-            }
-        }
-        */
-
         Ok(actual_return_value)
     }
 }
