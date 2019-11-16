@@ -1,451 +1,400 @@
-use super::index::Index;
-use super::list;
-use super::tokenizer::token;
-use super::tokenizer::token::{Key, Token};
-use super::tokenizer::{linecount, Tokenizer, Tracked};
-use super::util;
-use super::util::GatherMode;
-use crate::error::Leaf;
-use crate::identifier::r#type::{BaseType, Type};
-use crate::identifier::Identifier;
+use super::{
+    body, body::BodySource, Key, ParseError, ParseFault, RawToken, Token, Tokenizer, Type,
+};
+use std::convert::TryFrom;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::hash::Hash;
+use std::hash::Hasher;
 
-pub mod checker;
-
+#[derive(Default, Clone)]
 pub struct FunctionBuilder {
-    pub wheres: Vec<Vec<Tracked<Token>>>,
-    pub tokens: Vec<Tracked<Token>>,
-    pub header: FunctionHeader,
-    pub file: PathBuf,
-    pub line: linecount::Point,
-}
-
-#[derive(Clone)]
-pub struct FunctionHeader {
-    pub parameter_names: Vec<String>,
-    pub parameters: Vec<Type>,
-    pub wheres: Vec<String>,
-    pub returns: Type,
     pub name: String,
+    pub parameter_names: Vec<String>,
+    pub parameter_types: Vec<Type>,
+    pub returns: Type,
+    pub body: Token,
+    pub wheres: Vec<(String, Token)>,
 }
 
-const STOPPERS: &[(Token, u8)] = &[
-    (Token::K(Key::HeaderFn), 3),
-    (Token::K(Key::HeaderType), 5),
-    (Token::K(Key::HeaderConvert), 8),
-    (Token::EOF, 0),
-];
+impl PartialEq for FunctionBuilder {
+    fn eq(&self, other: &FunctionBuilder) -> bool {
+        self.name == other.name
+            && self.parameter_types == other.parameter_types
+            && self.returns == other.returns
+    }
+}
+impl Eq for FunctionBuilder {}
+impl Hash for FunctionBuilder {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.parameter_types.hash(state);
+        self.returns.hash(state);
+    }
+}
 
 impl FunctionBuilder {
-    pub fn new(file: PathBuf) -> Self {
-        Self {
+    pub fn new() -> Self {
+        FunctionBuilder {
+            name: String::new(),
+            parameter_names: Vec::new(),
+            parameter_types: Vec::new(),
+            returns: Type::default(),
+            body: Token::new(RawToken::NewLine, 0),
             wheres: Vec::new(),
-            tokens: Vec::new(),
-            header: FunctionHeader::new(),
-            file,
-            line: linecount::Point::new(),
-        }
-    }
-    pub fn from_raw_ir(
-        file: &str,
-        name: &str,
-        mut tokens: Vec<Token>,
-        returns: Type,
-        parameters: Vec<Type>,
-    ) -> Self {
-        Self {
-            wheres: Vec::new(),
-            tokens: tokens.drain(0..).map(Tracked::new).collect(),
-            file: PathBuf::from(file),
-            line: linecount::Point::new(),
-            header: FunctionHeader {
-                parameter_names: (0..parameters.len())
-                    .map(|n| n.to_string())
-                    .collect::<Vec<String>>(),
-                parameters,
-                wheres: Vec::new(),
-                returns,
-                name: name.to_owned(),
-            },
         }
     }
 
-    pub fn with_header(mut self, c: &mut Context) -> Result<Self, Leaf> {
-        let token = c.tokenizer.next_token(true);
-        match token {
-            Token::Word(name) => self.header.name = name,
-            _ => return Err(Leaf::ExFnName(token)),
+    pub fn with_header(mut self, tokenizer: &mut Tokenizer) -> Result<Self, ParseError> {
+        let first = match tokenizer.next() {
+            None => {
+                return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
+                    "function name".into(),
+                )])
+                .to_err(0)
+                .into()
+            }
+            Some(t) => t,
         };
-        super::is_valid_identifier(&self.header.name)?;
-        self.line = c.tokenizer.linecount;
+        let name = match first.inner {
+            RawToken::Identifier(name) => name,
+            _ => {
+                return ParseFault::GotButExpected(
+                    first.inner,
+                    vec![RawToken::Identifier("function name".into())],
+                )
+                .to_err(first.source_index)
+                .into()
+            }
+        };
+        self.name = name;
 
-        self.get_params(c)
+        let finished = match tokenizer.next().map(|t| (t.inner, t.source_index)) {
+            // It has no parameters and returns Type::Nothing
+            Some((RawToken::NewLine, _)) => self,
+            // It has return value but no parameters
+            Some((RawToken::Key(Key::ParenOpen), source)) => self
+                .with_return(tokenizer)
+                .map_err(|e| e.fallback(source))?,
+            // It has parameters
+            Some((RawToken::Identifier(ident), source)) => {
+                tokenizer.regress(ident.len());
+                self.with_parameter_names(tokenizer)
+                    .map_err(|e| e.fallback(source))?
+                    .with_parameter_types(tokenizer)
+                    .map_err(|e| e.fallback(source))?
+            }
+            Some((RawToken::Operator(op), source)) => {
+                return ParseFault::InvalidParameterName(op.identifier)
+                    .to_err(source)
+                    .into();
+            }
+            Some((rt, source)) => {
+                return ParseFault::GotButExpected(
+                    rt,
+                    vec![
+                        RawToken::Key(Key::ParenOpen),
+                        RawToken::Identifier("parameter name".into()),
+                    ],
+                )
+                .to_err(source)
+                .into()
+            }
+            None => {
+                return ParseFault::EndedWhileExpecting(vec![
+                    RawToken::Key(Key::ParenOpen),
+                    RawToken::Identifier("parameter name".into()),
+                ])
+                .to_err(0)
+                .into()
+            }
+        };
+        Ok(finished)
     }
 
-    fn get_params(mut self, c: &mut Context) -> Result<Self, Leaf> {
+    fn with_parameter_names(mut self, tokenizer: &mut Tokenizer) -> Result<Self, ParseError> {
         loop {
-            let token = c.tokenizer.next_token(true);
-            match token {
-                Token::HeaderFnEndNoArgs => {
-                    return Ok(self);
+            let next = match tokenizer.next() {
+                Some(t) => t,
+                None => {
+                    return ParseFault::EndedWhileExpecting(vec![
+                        RawToken::Key(Key::ParenOpen),
+                        RawToken::Identifier("parameter name".into()),
+                    ])
+                    .to_err(tokenizer.index() - 1)
+                    .into()
                 }
-                Token::Word(name) => {
-                    super::is_valid_identifier(&name)?;
-                    self.header.parameter_names.push(name)
+            };
+            match next.inner {
+                RawToken::Identifier(name) => self.parameter_names.push(name),
+                RawToken::Key(Key::ParenOpen) => return Ok(self),
+                _ => {
+                    return ParseFault::GotButExpected(
+                        next.inner,
+                        vec![
+                            RawToken::Identifier("parameter name".into()),
+                            RawToken::Key(Key::ParenOpen),
+                        ],
+                    )
+                    .to_err(next.source_index)
+                    .into()
                 }
-                Token::K(Key::ParenOpen) => {
-                    return self.get_param_types(c);
-                }
-                _ => return Err(Leaf::ExParam(token)),
             }
         }
     }
 
-    fn get_param_types(mut self, c: &mut Context) -> Result<Self, Leaf> {
-        loop {
-            let token = c.tokenizer.next_token(true);
-            match token {
-                Token::Word(tname) => {
-                    if c.tokenizer.get_char() == b')' {
-                        self.header.returns = Identifier::from(&tname, c.file, c.index);
-                        let next = c.tokenizer.next_token(false);
-                        if next != Token::K(Key::ParenClose) {
-                            return Err(Leaf::UnexInFnHeader(next));
-                        }
-                        return Ok(self);
-                    } else {
-                        super::is_valid_identifier(&tname)?;
-                        self.header
-                            .parameters
-                            .push(Identifier::from(&tname, c.file, c.index));
-                    }
-                }
-                Token::List(entries) => {
-                    if entries.len() != 1 {
-                        panic!("ERROR_TODO: Mixed types in list are not supported")
-                    }
-                    let t = self.list_to_type(c, &entries).unwrap(); // ? INSTEAD
-                    self.header.parameters.push(t);
-                }
-                Token::K(Key::ParenOpen) => self
-                    .header
-                    .parameters
-                    .push(self.parse_function_parameter_type(c)?),
-                Token::K(Key::HeaderArrow) => {
-                    let token = c.tokenizer.next_token(false);
-                    match token {
-                        Token::Word(return_name) => {
-                            super::is_valid_identifier(&return_name)?;
-                            self.header.returns = Identifier::from(&return_name, c.file, c.index);
-                        }
-                        _ => return Err(Leaf::ExFnReturn(token)),
-                    }
+    fn err_type_expecting(&self) -> Vec<RawToken> {
+        if self.parameter_types.is_empty() {
+            vec![RawToken::Identifier("parameter type".into())]
+        } else {
+            vec![
+                RawToken::Identifier("parameter type".into()),
+                RawToken::Key(Key::Arrow),
+            ]
+        }
+    }
 
-                    let next = c.tokenizer.next_token(false);
-                    if next != Token::K(Key::ParenClose) {
-                        return Err(Leaf::UnexInFnHeader(next));
-                    }
-                    return Ok(self);
+    fn with_parameter_types(mut self, tokenizer: &mut Tokenizer) -> Result<Self, ParseError> {
+        loop {
+            let (next_inner, next_source_index) = match tokenizer.next() {
+                Some(t) => (t.inner, t.source_index),
+                None => {
+                    return ParseFault::EndedWhileExpecting(self.err_type_expecting())
+                        .to_err(tokenizer.index() - 1)
+                        .into();
                 }
-                _ => return Err(Leaf::ExParamType(token)),
+            };
+            match next_inner {
+                RawToken::Identifier(name) => self
+                    .parameter_types
+                    .push(Type::try_from(name.as_str()).map_err(|e| e.to_err(next_source_index))?),
+                RawToken::Key(Key::ListOpen) => self
+                    .parameter_types
+                    .push(Type::List(Box::new(self.parse_list_type(tokenizer)?))),
+                RawToken::Key(Key::ParenClose) => return Ok(self),
+                RawToken::Key(Key::ParenOpen) => self
+                    .parameter_types
+                    .push(Type::Function(Box::new(self.parse_param_type(tokenizer)?))),
+                RawToken::Key(Key::Arrow) => return self.with_return(tokenizer),
+                _ => {
+                    return ParseFault::GotButExpected(next_inner, self.err_type_expecting())
+                        .to_err(next_source_index)
+                        .into()
+                }
             }
         }
     }
 
-    pub fn build(mut self, c: &mut Context) -> Result<Self, Leaf> {
-        self.tokens = self.build_buf(c, None)?;
-        c.index
-            .get_file(c.file)
-            .borrow_mut()
-            .set_func(self.header.clone());
+    fn parse_list_type(&self, tokenizer: &mut Tokenizer) -> Result<Type, ParseError> {
+        let (next, source_index) = match tokenizer.next() {
+            None => {
+                return ParseFault::Unmatched(Key::ParenOpen)
+                    .to_err(tokenizer.index() - 1)
+                    .into()
+            }
+            Some(t) => (t.inner, t.source_index),
+        };
+        let r#type = match next {
+            RawToken::Key(Key::ListOpen) => Type::List(Box::new(self.parse_list_type(tokenizer)?)),
+            RawToken::Identifier(name) => {
+                Type::try_from(name.as_str()).map_err(|e| e.to_err(source_index))?
+            }
+            _ => {
+                return ParseFault::Unmatched(Key::ParenOpen)
+                    .to_err(source_index)
+                    .into()
+            }
+        };
+        if let Some(t) = tokenizer.next() {
+            match t.inner {
+                RawToken::Key(Key::ListClose) => Ok(r#type),
+                _ => ParseFault::GotButExpected(t.inner, vec![RawToken::Key(Key::ListClose)])
+                    .to_err(t.source_index)
+                    .into(),
+            }
+        } else {
+            ParseFault::Unmatched(Key::ListOpen)
+                .to_err(source_index)
+                .into()
+        }
+    }
+
+    fn parse_param_type(&self, tokenizer: &mut Tokenizer) -> Result<(Vec<Type>, Type), ParseError> {
+        let mut buf = Vec::new();
+        loop {
+            let (next_inner, next_source_index) = match tokenizer.next() {
+                Some(t) => (t.inner, t.source_index),
+                None => {
+                    return ParseFault::EndedWhileExpecting(self.err_type_expecting())
+                        .to_err(tokenizer.index() - 1)
+                        .into();
+                }
+            };
+            match next_inner {
+                RawToken::Identifier(name) => buf
+                    .push(Type::try_from(name.as_str()).map_err(|e| e.to_err(next_source_index))?),
+                RawToken::Key(Key::ListOpen) => {
+                    buf.push(Type::List(Box::new(self.parse_list_type(tokenizer)?)))
+                }
+                RawToken::Key(Key::ParenOpen) => {
+                    buf.push(Type::Function(Box::new(self.parse_param_type(tokenizer)?)))
+                }
+                RawToken::Key(Key::Arrow) => {
+                    let returns = (buf, self.parse_return_type(tokenizer)?);
+                    return Ok(returns);
+                }
+                _ => {
+                    return ParseFault::GotButExpected(next_inner, self.err_type_expecting())
+                        .to_err(next_source_index)
+                        .into()
+                }
+            }
+        }
+    }
+
+    fn parse_return_type(&self, tokenizer: &mut Tokenizer) -> Result<Type, ParseError> {
+        let (next_inner, next_source_index) = match tokenizer.next() {
+            Some(t) => (t.inner, t.source_index),
+            None => {
+                return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
+                    "return type".into(),
+                )])
+                .to_err(tokenizer.index() - 1)
+                .into()
+            }
+        };
+        let r#type = match next_inner {
+            RawToken::Identifier(name) => {
+                Type::try_from(name.as_str()).map_err(|e| e.to_err(next_source_index))?
+            }
+            RawToken::Key(Key::ParenOpen) => {
+                Type::Function(Box::new(self.parse_param_type(tokenizer)?))
+            }
+            RawToken::Key(Key::ListOpen) => Type::List(Box::new(self.parse_list_type(tokenizer)?)),
+            _ => {
+                return ParseFault::GotButExpected(
+                    next_inner,
+                    vec![RawToken::Identifier("return type".into())],
+                )
+                .to_err(next_source_index)
+                .into()
+            }
+        };
+        let after = match tokenizer.next() {
+            None => {
+                return ParseFault::EndedWhileExpecting(vec![RawToken::Key(Key::ParenClose)])
+                    .to_err(next_source_index)
+                    .into()
+            }
+            Some(t) => t,
+        };
+        match after.inner {
+            RawToken::Key(Key::ParenClose) => Ok(r#type),
+            _ => ParseFault::GotButExpected(after.inner, vec![RawToken::Key(Key::ParenClose)])
+                .to_err(after.source_index)
+                .into(),
+        }
+    }
+
+    fn with_return(mut self, tokenizer: &mut Tokenizer) -> Result<Self, ParseError> {
+        self.returns = self.parse_return_type(tokenizer)?;
         Ok(self)
     }
 
-    // The tokenizer turns [a] into RuntimeList(Vec(Word("a"))), this is a hacky way to undo that
-    // ERROR TODO
-    fn list_to_type(&self, c: &mut Context, runtime_list: &[Tracked<Token>]) -> Result<Type, ()> {
-        if runtime_list.len() != 1 {
-            return Err(());
-        }
-        match &runtime_list[0].inner {
-            Token::List(nested) => Ok(Type::List(Box::new(self.list_to_type(c, &nested)?))),
-            Token::Word(tname) => Ok(Type::List(Box::new(Identifier::from(
-                tname, c.file, c.index,
-            )))),
-            _ => Err(()),
+    pub fn parse_body(&mut self, tokenizer: &mut Tokenizer) -> Result<Token, ParseError> {
+        let entry = self.parse_body_tokens(tokenizer)?;
+        self.parse_body_wheres(tokenizer)?;
+        Ok(entry)
+    }
+
+    pub fn parse_body_tokens(&mut self, tokenizer: &mut Tokenizer) -> Result<Token, ParseError> {
+        let entry = tokenizer.walk(body::Mode::Neutral)?;
+        match entry {
+            body::WalkResult::Value(v) => Ok(v),
+            body::WalkResult::EOF => Ok(Token::new(RawToken::Unimplemented, 0)),
+            _ => panic!("Body ended without value: {:?}", entry),
         }
     }
 
-    fn parse_function_parameter_type(&self, c: &mut Context) -> Result<Type, Leaf> {
-        let mut takes = Vec::new();
+    pub fn parse_body_wheres(&mut self, tokenizer: &mut Tokenizer) -> Result<(), ParseError> {
         loop {
-            let token = c.tokenizer.next_token(false);
-            match token {
-                Token::Word(type_name) => takes.push(Identifier::from(&type_name, c.file, c.index)),
-                Token::K(Key::ParenOpen) => takes.push(self.parse_function_parameter_type(c)?),
-                Token::K(Key::HeaderArrow) => {
-                    let next = c.tokenizer.next_token(false);
-                    let returns: Type = match next {
-                        Token::Word(return_name) => {
-                            super::is_valid_identifier(&return_name)?;
-                            Identifier::from(&return_name, c.file, c.index)
-                        }
-                        _ => return Err(Leaf::ExFnReturn(token)),
-                    };
-                    let last = c.tokenizer.next_token(false);
-                    return if last != Token::K(Key::ParenClose) {
-                        Err(Leaf::Unexpected(token))
-                    } else {
-                        Ok(Type::Closure(takes, Box::new(returns)))
-                    };
+            let next = match tokenizer.next() {
+                Some(t) => t,
+                None => {
+                    tokenizer.undo();
+                    return Ok(());
                 }
-                Token::EOF => {
-                    return Err(Leaf::Unmatched(token));
-                }
-                _ => return Err(Leaf::UnexInFnHeader(token)),
-            }
-        }
-    }
-}
-
-pub struct Context<'a> {
-    tokenizer: &'a mut Tokenizer,
-    index: &'a mut Index,
-    file: &'a Path,
-}
-impl<'a> Context<'a> {
-    pub fn new(file: &'a Path, tokenizer: &'a mut Tokenizer, index: &'a mut Index) -> Self {
-        Self {
-            tokenizer,
-            index,
-            file,
-        }
-    }
-}
-
-impl FunctionBuilder {
-    fn build_buf(
-        &mut self,
-        c: &mut Context,
-        stop_at: Option<&[Key]>,
-    ) -> Result<Vec<Tracked<Token>>, Leaf> {
-        let mut tbuf = Vec::new();
-        loop {
-            let mut token = Tracked {
-                position: c.tokenizer.linecount,
-                inner: c.tokenizer.next_token(false),
             };
-            for (stopper, len) in STOPPERS.iter() {
-                if stopper == &token.inner {
-                    c.tokenizer.regress(*len as usize);
-                    return Ok(tbuf);
+            match next.inner {
+                RawToken::Key(Key::Where) => {
+                    let (name, t) = body::r#where::build(tokenizer)?;
+                    self.wheres.push((name, t));
+                }
+                RawToken::Header(_) => {
+                    tokenizer.undo();
+                    return Ok(());
+                }
+                _ => {
+                    return ParseFault::GotButExpected(
+                        next.inner,
+                        vec![
+                            RawToken::Key(Key::Where),
+                            RawToken::Header(super::Header::Function),
+                        ],
+                    )
+                    .to_err(next.source_index)
+                    .into()
                 }
             }
-            match &token.inner {
-                Token::K(Key::ListOpen) => {
-                    let make_tracked = |t| Tracked {
-                        inner: t,
-                        position: token.position,
-                    };
-
-                    let (raw_list, _was_on) = c
-                        .tokenizer
-                        .gather_to(GatherMode::NonBreaking, &[b']'])
-                        .unwrap();
-                    let mut list_buffer = Vec::new();
-                    list::build_list(raw_list, false, |entity| -> Result<(), ()> {
-                        let mut index = 0;
-                        let mut entity_buffer = Vec::new();
-                        loop {
-                            let (raw_token, was_on) =
-                                util::gather_to(GatherMode::Normal, &entity[index..], &[b' ']);
-                            index += raw_token.len();
-
-                            let mut construct = |raw| {
-                                match Tokenizer::build_token(raw) {
-                                    token::Result::Empty => index += 1,
-                                    token::Result::Complete(token) => {
-                                        entity_buffer.push(make_tracked(token))
-                                    }
-                                    _ => panic!("Unexpected entity from token parse"),
-                                };
-                            };
-
-                            if was_on == 0 {
-                                construct(raw_token);
-                                break;
-                            }
-                            construct(raw_token);
-                        }
-                        if entity_buffer.len() > 1 {
-                            list_buffer.push(make_tracked(Token::Group(entity_buffer)))
-                        } else {
-                            list_buffer.push(entity_buffer.remove(0))
-                        }
-                        Ok(())
-                    })
-                    .unwrap();
-                    token.inner = Token::List(list_buffer);
-                }
-                Token::K(Key::Pipe) => {
-                    token.inner = Token::Group(self.build_buf(c, Some(&[Key::Pipe]))?)
-                }
-                Token::K(Key::ParenOpen) => {
-                    token.inner = Token::Group(self.build_buf(c, Some(&[Key::ParenClose]))?);
-                    let next = c.tokenizer.next_token(false);
-                    if next != Token::K(Key::ParenClose) {
-                        panic!("ERROR_TODO: Missing matching '(': {:?}", next);
-                    }
-                }
-                Token::K(Key::ElseIf) => {
-                    c.tokenizer.regress(Key::ElseIf.to_string().len() + 1);
-                    return Ok(tbuf);
-                }
-                Token::K(Key::Where) => loop {
-                    let identifier = if let Token::Word(w) = c.tokenizer.next_token(false) {
-                        w
-                    } else {
-                        return Err(Leaf::Expected(
-                            vec![Token::Word("<where identifier>".to_owned())],
-                            token.inner,
-                        ));
-                    };
-                    if c.tokenizer.next_token(false) != Token::K(Key::Assign) {
-                        return Err(Leaf::Expected(vec![Token::K(Key::Assign)], token.inner));
-                    }
-                    let tokens = self.build_buf(c, Some(&[Key::Where]))?;
-                    self.header.wheres.push(identifier.to_owned());
-                    self.wheres.push(tokens);
-
-                    let next = c.tokenizer.next_token(false);
-                    if next != Token::K(Key::Where) {
-                        c.tokenizer.regress(next.to_string().len() + 1);
-                        return Ok(tbuf);
-                    }
-                },
-                Token::K(Key::If) => {
-                    let mut branches = Vec::new();
-                    let conditional = self.build_buf(c, Some(&[Key::Then]))?;
-                    //panic!("{}", self.tokenizer.next_token(false));
-                    let next = c.tokenizer.next_token(false);
-                    if next != Token::K(Key::Then) {
-                        return Err(Leaf::Expected(vec![Token::K(Key::Then)], next));
-                    }
-                    let eval = self.build_buf(c, Some(&[Key::ElseIf, Key::Else]))?;
-                    c.tokenizer.regress_to(b' ');
-                    branches.push((conditional, eval));
-                    let else_branch: Vec<Tracked<Token>>;
-                    loop {
-                        let next = c.tokenizer.next_token(false);
-                        match next {
-                            Token::K(Key::Else) => {
-                                else_branch = self.build_buf(c, None)?;
-                                break;
-                            }
-                            Token::K(Key::ElseIf) => {
-                                let conditional = self.build_buf(c, Some(&[Key::Then]))?;
-                                let next = c.tokenizer.next_token(false);
-                                if next != Token::K(Key::Then) {
-                                    return Err(Leaf::Expected(vec![Token::K(Key::Then)], next));
-                                }
-                                let eval = self.build_buf(c, Some(&[Key::ElseIf, Key::Else]))?;
-                                c.tokenizer.regress_to(b' ');
-                                branches.push((conditional, eval));
-                                continue;
-                            }
-                            _ => {
-                                return Err(Leaf::Expected(
-                                    vec![Token::K(Key::ElseIf), Token::K(Key::Else)],
-                                    next,
-                                ))
-                            }
-                        }
-                    }
-                    token.inner = Token::IfStatement(branches, else_branch);
-                }
-                Token::K(Key::ClosureMarker) => {
-                    let next = c.tokenizer.next_token(false);
-                    match next {
-                        // `#fname`
-                        Token::Word(_fnname) => {
-                            panic!("Closures unimplemented");
-                        }
-                        // `#(...)`
-                        Token::K(Key::ParenOpen) => {
-                            let next = c.tokenizer.next_token(false);
-                            match next {
-                                // `#(\n: ...)`
-                                Token::LambdaHeader(_) => panic!("Lambda unimplemented"),
-                                // `#(fname ...)`
-                                Token::Word(fname) => {
-                                    panic!(fname.clone());
-                                }
-                                _ => panic!("ERROR_TODO: Unexpected thingy in closure marker"),
-                            }
-                        }
-                        _ => panic!(
-                            "ERROR_TODO: Unexpected thingy in closure marker: {:?}",
-                            next
-                        ),
-                    }
-                }
-                Token::K(k) => {
-                    if let Some(stopper) = stop_at {
-                        if stopper.contains(k) {
-                            println!("{}", k.to_string().len());
-                            c.tokenizer.regress(k.to_string().len());
-                            return Ok(tbuf);
-                        }
-                    }
-                }
-                Token::Word(w) => {
-                    if w == &self.header.name {
-                        token.inner = Token::Recurse(self.header.parameters.len());
-                    }
-                }
-                _ => {}
-            }
-            tbuf.push(token);
         }
+    }
+    pub fn get_parameter(&self, ident: &str) -> Option<usize> {
+        for (i, n) in self.parameter_names.iter().enumerate() {
+            if n == ident {
+                return Some(i);
+            }
+        }
+        None
+    }
+    pub fn get_parameter_type(&self, pid: usize) -> &Type {
+        &self.parameter_types[pid]
+    }
+    pub fn check_return(&self, got: &Type) -> Result<(), ParseFault> {
+        if *got != self.returns && self.returns != Type::Nothing {
+            return Err(ParseFault::FnTypeReturnMismatch(
+                Box::new(self.clone()),
+                got.clone(),
+            ));
+        }
+        Ok(())
     }
 }
 
-// FunctionHeader gets detatched in preperation for runtime when FunctionBuilder is converted into
-// a Function
-impl FunctionHeader {
-    fn new() -> Self {
-        Self {
-            parameter_names: Vec::new(),
-            parameters: Vec::new(),
-            wheres: Vec::new(),
-            returns: Type::Base(BaseType::Nothing),
-            name: String::new(),
-        }
-    }
-}
-
-impl fmt::Debug for FunctionHeader {
+impl fmt::Debug for FunctionBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let param_types: Vec<String> = self
-            .parameters
+        let types = self
+            .parameter_types
             .iter()
-            .map(|t| t.into())
+            .map(|t| t.to_string())
             .collect::<Vec<String>>();
-        let returns: String = (&self.returns).into();
-        let wheres = self.wheres.join(", ");
+        let annotation = if types.is_empty() {
+            format!("{}", self.returns)
+        } else {
+            format!("{} -> {}", types.join(" "), self.returns)
+        };
+        let where_statements = self
+            .wheres
+            .iter()
+            .map(|(name, entry)| format!("where {}: {:?}", name, entry))
+            .collect::<Vec<String>>()
+            .join("\n  ");
         write!(
             f,
-            "{} {} ({} -> {}) {}",
+            "fn {} {} ({})\n{:#?}{}",
             self.name,
             self.parameter_names.join(" "),
-            param_types.join(" "),
-            returns,
-            if wheres.is_empty() {
-                "".to_owned()
-            } else {
-                format!("where {}", wheres)
-            }
+            annotation,
+            self.body,
+            where_statements,
         )
     }
 }

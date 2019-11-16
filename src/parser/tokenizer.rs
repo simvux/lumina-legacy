@@ -1,239 +1,212 @@
+mod token;
 use std::convert::TryFrom;
+pub use token::{
+    is_valid_identifier, Header, Inlined, Key, Operator, RawToken, Token,
+    ALLOWED_IDENTIFIER_CHARACTERS,
+};
 
-pub mod linecount;
-use linecount::Point;
-pub mod token;
-use token::{Key, Token};
-
-use super::util;
-use super::util::GatherMode;
-use crate::evaler::r#type::Value;
-use crate::evaler::runner::Entity;
-
-const STOPPERS: &[u8] = &[b' ', b'(', b')', b'\n', b'[', b']'];
-
-#[derive(Debug)]
-pub struct Tokenizer {
-    source: Vec<u8>,
-    pub index: usize,
-    pub linecount: linecount::Point,
+pub struct Tokenizer<'s> {
+    source_code: &'s [u8],
+    history: Vec<usize>,
+    index: usize,
 }
 
-#[derive(Debug, Clone)]
-pub struct Tracked<T: PartialEq + Clone> {
-    pub inner: T,
-    pub position: linecount::Point,
-}
-// We only want to compare inner, and ignore if the position is different
-impl<T: PartialEq + Clone> PartialEq for Tracked<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.inner.eq(&other.inner)
-    }
-}
+const BREAK_AT: &[u8] = b" ,()[]+*/\n#{}#";
+const IGNORES_SPACE: &[u8] = b",([+*/\n#{}#";
+// &[(x, [y])] -> Only early-breaks on x if the next byte isn't any of y
+const MAYBE_IGNORES_SPACE: &[(u8, &[u8])] = &[
+    (b'-', &[b'>']),
+    (b'!', &[b'=']),
+    (b':', ALLOWED_IDENTIFIER_CHARACTERS),
+];
 
-impl<T: PartialEq + Clone> Tracked<T> {
-    #[inline]
-    pub fn sep(self) -> (T, linecount::Point) {
-        (self.inner, self.position)
-    }
-    #[inline]
-    pub fn new(inner: T) -> Self {
-        Tracked {
-            inner,
-            position: linecount::Point::new(),
-        }
-    }
-}
-
-impl Tokenizer {
-    pub fn new(source: Vec<u8>) -> Self {
+impl<'s> From<&'s [u8]> for Tokenizer<'s> {
+    fn from(source_code: &'s [u8]) -> Self {
         Self {
-            source,
+            source_code,
+            history: vec![0],
             index: 0,
-            linecount: Point::new(),
         }
     }
+}
 
-    pub fn build_token(chars: &[u8]) -> token::Result<Token> {
-        if let Ok(v) = Value::try_from(chars) {
-            let token = Token::Finished(Entity::V(v));
-            return token::Result::Complete(token);
-        }
-
-        let first = match chars.get(0) {
-            None => return token::Result::Empty,
-            Some(t) => *t,
-        };
-        match Key::matches(first) {
-            token::Result::Complete(key) => return token::Result::Complete(Token::K(key)),
-            token::Result::Single(key) => {
-                if key.is(chars) {
-                    let token = Token::K(key);
-                    return token::Result::Complete(token);
-                }
-            }
-            token::Result::Multiple(key_matches) => {
-                for key in key_matches {
-                    if key.is(chars) {
-                        let token = Token::K(key.clone());
-                        return token::Result::Complete(token);
-                    }
-                }
-            }
-            token::Result::Empty => panic!("Empty token result from Key::matches"),
-            token::Result::Unmatched => {}
-        };
-        // Is it a lambda?
-        if chars.first() == Some(&b'\\') && chars.last() == Some(&b':') && chars.len() > 2 {
-            let token =
-                Token::LambdaHeader(String::from_utf8(chars[1..chars.len() - 1].to_vec()).unwrap());
-            token::Result::Complete(token)
+impl<'s> Tokenizer<'s> {
+    pub fn push_history(&mut self, n: usize) {
+        // We don't need more than 3 in history, so lets reuse some allocations
+        if self.history.len() == 3 {
+            self.history[0] = self.history[1];
+            self.history[1] = self.history[2];
+            self.history[2] = n;
         } else {
-            let token = Token::Word(String::from_utf8(chars.to_vec()).unwrap());
-            token::Result::Complete(token)
+            self.history.push(n);
         }
     }
-
-    pub fn next_token(&mut self, is_header: bool) -> Token {
-        if let Some(c) = self.source.get(self.index) {
-            // Skip newlines
-            if *c == b'\n' {
-                // Weird hack to make sure the first newline is counted if first line is empty
-                if self.linecount.line == 0 {
-                    self.linecount.line += 1;
-                }
-
-                self.next();
-                return if is_header {
-                    // Unless it's an explicitely required newline
-                    Token::HeaderFnEndNoArgs
-                } else {
-                    self.next_token(is_header)
-                };
-            }
-            if *c == b')' {
-                self.next();
-                return Token::K(Key::ParenClose);
-            }
-        }
-
-        let (chars, _) = match self.gather_to(GatherMode::Normal, STOPPERS) {
-            None => return Token::EOF,
-            Some(gather) => gather,
-        };
-        let token = Self::build_token(chars);
-        match token {
-            token::Result::Empty => self.next_token(is_header),
-            token::Result::Complete(t) => {
-                if let Token::K(Key::Comment) = t {
-                    self.skip_to(b'\n');
-                    self.next_token(is_header)
-                } else {
-                    t
-                }
-            }
-            _ => panic!("Unexpected entity from token parse: {:?}", token),
-        }
+    pub fn pop_history(&mut self) -> usize {
+        self.history.pop().unwrap_or(0)
     }
-
-    pub fn gather_to(&mut self, mode: GatherMode, stop_at: &[u8]) -> Option<(&[u8], u8)> {
-        if self.index >= self.source.len() {
-            return None;
-        }
-        let (gathered, was_on) = util::gather_to(mode, &self.source[self.index..], stop_at);
-
-        // We want these stoppers to be included in the next gather
-        if b"(\n[)#".contains(&was_on) {
-            self.index -= 1;
-            if self.source.get(self.index) == Some(&b'\n') {
-                self.linecount.line -= 1;
-            }
-        };
-
-        for _ in 0..=gathered.len() {
-            self.index += 1;
-            if self.source.get(self.index) == Some(&b'\n') {
-                self.linecount.line += 1;
-            }
-        }
-        Some((util::trim(gathered), was_on))
+    pub fn index(&self) -> usize {
+        self.index
     }
-
-    fn skip_to(&mut self, delim: u8) -> usize {
-        let mut i = 0;
+    pub fn regress(&mut self, n: usize) {
+        self.index -= n;
+    }
+    fn progress(&mut self, n: usize) {
+        self.index += n;
+    }
+    fn progress_until<F>(&mut self, mut predicate: F) -> bool
+    where
+        F: FnMut(&mut Self) -> bool,
+    {
         loop {
-            if *self.source.get(self.index + i).unwrap_or(&delim) == delim {
-                self.progress(i);
-                return i;
+            if self.source_code.len() <= self.index {
+                break false;
+            }
+            if predicate(self) {
+                break true;
+            }
+            self.progress(1);
+        }
+    }
+    pub fn next_char(&mut self) -> u8 {
+        let mut i = 1;
+        loop {
+            let c = self.source_code[self.index + i];
+            if c != b' ' && c != b'\n' {
+                return c;
             }
             i += 1;
         }
     }
-
-    pub fn source(&self) -> &[u8] {
-        &self.source
-    }
-
-    #[inline]
-    pub fn next(&mut self) {
-        self.index += 1;
-        self.update_lc_f();
-    }
-
-    #[inline]
-    pub fn get_char(&self) -> u8 {
-        self.source[self.index]
-    }
-
-    #[inline]
-    #[allow(dead_code)]
-    fn try_get_char(&self) -> Option<u8> {
-        self.source.get(self.index).copied()
-    }
-
-    #[inline]
-    pub fn peek(&self) -> Option<u8> {
-        self.source.get(self.index).copied()
-    }
-
-    pub fn last_char(&self) -> u8 {
-        self.source[self.index - 1]
-    }
-
-    #[inline]
-    pub fn regress(&mut self, amount: usize) {
-        for _ in 0..amount {
-            self.index -= 1;
-            self.update_lc_b();
-        }
-    }
-
-    #[inline]
-    pub fn progress(&mut self, amount: usize) {
-        for _ in 0..amount {
-            self.index += 1;
-            self.update_lc_f();
-        }
-    }
-    #[inline]
-    pub fn update_lc_f(&mut self) {
-        if self.source.get(self.index) == Some(&b'\n') {
-            self.linecount.line += 1;
-        }
-    }
-    #[inline]
-    pub fn update_lc_b(&mut self) {
-        if self.source.get(self.index) == Some(&b'\n') {
-            self.linecount.line -= 1;
-        }
-    }
-
-    pub fn regress_to(&mut self, ident: u8) {
-        loop {
-            if *self.source.get(self.index).unwrap_or(&ident) == ident {
-                return;
+    pub fn skip_spaces_and_newlines(&mut self) {
+        let c = self.source_code.get(self.index);
+        match c {
+            Some(b' ') | Some(b'\n') => {
+                self.progress(1);
+                self.skip_spaces_and_newlines();
             }
-            self.regress(1);
+            Some(b'/') => {
+                let next = self.source_code.get(self.index + 1).copied();
+                if next == Some(b'/') {
+                    self.progress_until(|s| s.source_code[s.index] == b'\n');
+                    self.skip_spaces_and_newlines();
+                } else if next == Some(b'*') {
+                    self.progress_until(|s| {
+                        (s.source_code[s.index] == b'*' && s.next_char() == b'/')
+                    });
+                }
+            }
+            _ => {}
         }
+    }
+
+    fn prettified_index(&self) -> usize {
+        let mut offset = 0;
+        loop {
+            let c = match self.source_code.get(self.index + offset) {
+                None => return self.index + offset - 1,
+                Some(c) => *c,
+            };
+            if c == b' ' || c == b'\n' {
+                offset += 1;
+            } else {
+                return self.index + offset;
+            }
+        }
+    }
+
+    fn gather_to(&mut self, stoppers: &'s [u8]) -> &'s [u8] {
+        let origin = self.index;
+        let c = match self.source_code.get(self.index) {
+            Some(c) => *c,
+            None => return &[],
+        };
+        if c == b' ' {
+            self.progress(1);
+            return self.gather_to(stoppers);
+        }
+        if c == b'/' {
+            let next = self.source_code.get(self.index + 1).copied();
+            // Single line comment
+            if next == Some(b'/') {
+                self.progress_until(|s| s.source_code[s.index] == b'\n');
+                self.progress(1);
+                return self.gather_to(stoppers);
+            }
+            if next == Some(b'*') {
+                let found_comment_exit = self
+                    .progress_until(|s| (s.source_code[s.index] == b'*' && s.next_char() == b'/'));
+                self.progress(1);
+                if !found_comment_exit {
+                    return &[];
+                }
+                self.progress(1);
+                return self.gather_to(stoppers);
+            }
+        }
+        for cmp_against in IGNORES_SPACE.iter().cloned() {
+            if c == cmp_against {
+                self.progress(1);
+                return &self.source_code[origin..self.index];
+            }
+        }
+        for (cmp_against, unless_buf) in MAYBE_IGNORES_SPACE.iter().cloned() {
+            if c == cmp_against && !unless_buf.contains(&self.next_char()) {
+                self.progress(1);
+                return &self.source_code[origin..self.index];
+            }
+        }
+        loop {
+            self.progress(1);
+            let c = match self.source_code.get(self.index) {
+                Some(c) => *c,
+                None => return &self.source_code[origin..self.index],
+            };
+            if stoppers.contains(&c) {
+                return &self.source_code[origin..self.index];
+            }
+        }
+    }
+}
+
+impl<'s> super::body::BodySource for Tokenizer<'s> {
+    fn next(&mut self) -> Option<Token> {
+        // self.last_index = self.index;
+        self.push_history(self.index);
+        let source_index = self.prettified_index();
+
+        let raw = self.gather_to(BREAK_AT);
+        let mut t = Token::try_from(raw)
+            .ok()
+            .map(|t| t.with_source_index(source_index))?;
+
+        // This is a little hacked together but the edge case is that `a:b` is an external call
+        // while `a: b` is a lambda/matchbranch/whatever.
+        if let RawToken::Identifier(ident) = &t.inner {
+            let mut spl = ident.split(':');
+            let first = spl.next().unwrap();
+            if let Some(second) = spl.next() {
+                if second.is_empty() {
+                    // edge-case for `valid_ident: unrelated_code`
+                    self.regress(1);
+                    return Some(Token::new(
+                        RawToken::Identifier(ident[0..ident.len() - 1].to_owned()),
+                        source_index,
+                    ));
+                }
+                let mut identbuf = vec![first.to_owned(), second.to_owned()];
+                for additional in spl {
+                    identbuf.push(additional.to_owned());
+                }
+
+                t.inner = RawToken::ExternalIdentifier(identbuf);
+                return Some(t);
+            } else {
+                return Some(t);
+            }
+        }
+        Some(t)
+    }
+    fn undo(&mut self) {
+        self.index = self.pop_history();
     }
 }
