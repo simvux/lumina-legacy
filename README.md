@@ -1,5 +1,18 @@
 # Leaf - A High-Level Interpreted Functional Programming Language
 
+   * [Introduction](#introduction)
+   * [Full Design](#full-design)
+   * [Features](#features)
+      * [Data flow using '&lt;&lt;'](#data-flow-using-)
+      * [User-defined operators](#user-defined-operators)
+      * [Powerful record syntax](#powerful-record-syntax)
+      * [Function Parameters](#function-parameters)
+      * [Short and concise compile-time errors in plain human language](#short-and-concise-compile-time-errors-in-plain-human-language)
+      * [Modern rust-like error handling](#modern-rust-like-error-handling)
+   * [Examples](#examples)
+   * [Status](#status)
+
+
 ## Introduction
 Leaf's a work-in-progress programming language focused on efficiency of writing, readability, simplicity and performance.
 
@@ -80,7 +93,7 @@ type point
 fn main
     -- modify the point coming from pipe
     { y = 3 }
-    -- modify the point assign to 'p'
+    -- modify the point assigned to 'p'
     << \p -> { p | x = 1 }
     -- initialize new instance of point
     << { point | x = 2, y = 1 }
