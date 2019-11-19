@@ -16,7 +16,7 @@ impl IrBuilder {
             RawToken::Unimplemented => source.returns(&self.parser).clone(),
             RawToken::ByPointer(box t) => {
                 match &t.inner {
-                    RawToken::Identifier(ident) => {
+                    RawToken::Identifier(ident, anot) => {
                         // let func = &self.parser.modules[fid].functions[funcid];
                         let func = source.func(&self.parser);
                         if let Some(paramid) = func.get_parameter(ident) {
@@ -30,7 +30,7 @@ impl IrBuilder {
                             unimplemented!();
                         }
                     }
-                    RawToken::ExternalIdentifier(entries) => {
+                    RawToken::ExternalIdentifier(entries, anot) => {
                         let newfid = self.parser.modules[source.fid()]
                             .imports
                             .get(&entries[0])
@@ -71,10 +71,10 @@ impl IrBuilder {
                 }
                 drop(param_types);
                 match &entry.inner {
-                    RawToken::Identifier(ident) => self
+                    RawToken::Identifier(ident, anot) => self
                         .type_check_function(source.fid(), ident, &p_types.borrow())
                         .map_err(|e| e.fallback(token.source_index))?,
-                    RawToken::ExternalIdentifier(entries) => {
+                    RawToken::ExternalIdentifier(entries, anot) => {
                         let newfid = match self.parser.modules[source.fid()]
                             .imports
                             .get(&entries[0])
@@ -94,7 +94,7 @@ impl IrBuilder {
                     _ => panic!("{:#?} cannot take parameters", entry.inner),
                 }
             }
-            RawToken::Identifier(ident) => {
+            RawToken::Identifier(ident, anot) => {
                 {
                     let func = source.func(&self.parser);
                     if let Some(paramid) = func.get_parameter(ident) {
@@ -105,7 +105,7 @@ impl IrBuilder {
                 // This is only for leaf constants. Since other functions will be RawToken::Parameterized
                 self.type_check_function(source.fid(), ident, &[])?
             }
-            RawToken::ExternalIdentifier(entries) => {
+            RawToken::ExternalIdentifier(entries, anot) => {
                 let newfid = match self.parser.modules[source.fid()]
                     .imports
                     .get(&entries[0])
@@ -227,10 +227,10 @@ impl IrBuilder {
     fn find_return_type(&self, fid: usize, params: &[Type], t: &RawToken) -> Type {
         let me = &self.parser.modules[fid];
         match t {
-            RawToken::Identifier(ident) => {
+            RawToken::Identifier(ident, anot) => {
                 me.functions[me.function_ids[ident][params]].returns.clone()
             }
-            RawToken::ExternalIdentifier(entries) => {
+            RawToken::ExternalIdentifier(entries, anot) => {
                 let newfid = me.imports[&entries[0]];
                 let newme = &self.parser.modules[newfid];
                 newme.functions[newme.function_ids[&entries[1]][params]]

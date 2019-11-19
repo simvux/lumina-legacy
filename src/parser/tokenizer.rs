@@ -1,4 +1,5 @@
 mod token;
+use super::annotation;
 use std::convert::TryFrom;
 pub use token::{
     is_valid_identifier, Header, Inlined, Key, Operator, RawToken, Token,
@@ -179,17 +180,18 @@ impl<'s> super::body::BodySource for Tokenizer<'s> {
             .ok()
             .map(|t| t.with_source_index(source_index))?;
 
-        // This is a little hacked together but the edge case is that `a:b` is an external call
-        // while `a: b` is a lambda/matchbranch/whatever.
-        if let RawToken::Identifier(ident) = &t.inner {
+        if let RawToken::Identifier(ident, _anot) = &t.inner {
+            // This is a little hacked together but the edge case is that `a:b` is an external call
+            // while `a: b` is a lambda/matchbranch/whatever.
             let mut spl = ident.split(':');
             let first = spl.next().unwrap();
             if let Some(second) = spl.next() {
                 if second.is_empty() {
                     // edge-case for `valid_ident: unrelated_code`
                     self.regress(1);
+                    let new = &ident[0..ident.len() - 1];
                     return Some(Token::new(
-                        RawToken::Identifier(ident[0..ident.len() - 1].to_owned()),
+                        RawToken::Identifier(new.to_owned(), None),
                         source_index,
                     ));
                 }
@@ -198,7 +200,7 @@ impl<'s> super::body::BodySource for Tokenizer<'s> {
                     identbuf.push(additional.to_owned());
                 }
 
-                t.inner = RawToken::ExternalIdentifier(identbuf);
+                t.inner = RawToken::ExternalIdentifier(identbuf, None);
                 return Some(t);
             } else {
                 return Some(t);

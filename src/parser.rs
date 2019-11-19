@@ -22,6 +22,7 @@ mod irbuilder;
 pub use irbuilder::IrBuilder;
 pub mod flags;
 use body::BodySource;
+pub mod annotation;
 mod error;
 mod operator;
 pub use error::*;
@@ -194,11 +195,12 @@ impl Parser {
                     }
                     Header::Use => {
                         let import = match tokenizer.next().map(|t| t.inner) {
-                            Some(RawToken::Identifier(single)) => vec![single],
-                            Some(RawToken::ExternalIdentifier(entries)) => entries,
+                            Some(RawToken::Identifier(single, anot)) => vec![single],
+                            Some(RawToken::ExternalIdentifier(entries, anot)) => entries,
                             None => {
                                 return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
                                     "identifier".into(),
+                                    None,
                                 )])
                                 .to_err(tokenizer.index() - 1)
                                 .with_source_code(source_code, &module_path)
@@ -283,6 +285,7 @@ impl Parser {
             None => {
                 return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
                     "custom type name".into(),
+                    None,
                 )])
                 .to_err(0)
                 .into()
@@ -290,7 +293,7 @@ impl Parser {
             Some(t) => t,
         };
         let type_name = match first.inner {
-            RawToken::Identifier(name) => name,
+            RawToken::Identifier(name, anot) => name,
             _ => panic!("ERROR_TODO: Wanted type name, got {:?}", first),
         };
         let mut fields = Vec::new();
@@ -302,7 +305,7 @@ impl Parser {
 
             let next = tokenizer.next().expect("ERROR_TODO: File ended");
             let field_name = match next.inner {
-                RawToken::Identifier(field_name) => field_name,
+                RawToken::Identifier(field_name, anot) => field_name,
                 RawToken::Header(h) => {
                     tokenizer.regress(h.as_str().len() + 1);
                     break;
@@ -311,7 +314,7 @@ impl Parser {
             };
             let next = tokenizer.next().expect("ERROR_TODO");
             match next.inner {
-                RawToken::Identifier(type_name) => fields.push((
+                RawToken::Identifier(type_name, anot) => fields.push((
                     field_name.to_owned(),
                     Type::try_from(type_name.as_str()).unwrap(),
                 )),

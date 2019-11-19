@@ -42,6 +42,7 @@ impl FunctionBuilder {
                 None => {
                     return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
                         "type expected to the left side of the operator".into(),
+                        None,
                     )])
                     .to_err(0)
                     .into();
@@ -49,7 +50,7 @@ impl FunctionBuilder {
                 Some(t) => t,
             };
             let source_index = next.source_index;
-            if let RawToken::Identifier(ident) = next.inner {
+            if let RawToken::Identifier(ident, anot) = next.inner {
                 Ok((
                     Type::try_from(ident.as_str()).map_err(|e| e.to_err(source_index))?,
                     next.source_index,
@@ -59,6 +60,7 @@ impl FunctionBuilder {
                     next.inner,
                     vec![RawToken::Identifier(
                         "type expected to the left side of the operator".into(),
+                        None,
                     )],
                 )
                 .to_err(next.source_index)

@@ -31,6 +31,10 @@ impl Token {
         self.source_index = source_index;
         self
     }
+
+    pub fn sep(self) -> (RawToken, usize) {
+        (self.inner, self.source_index)
+    }
 }
 
 impl fmt::Debug for Token {
@@ -63,7 +67,7 @@ impl TryFrom<&[u8]> for Token {
                 return RawToken::NewLine;
             }
 
-            RawToken::Identifier(String::from_utf8(bytes.to_vec()).unwrap())
+            RawToken::Identifier(String::from_utf8(bytes.to_vec()).unwrap(), None)
         };
 
         let t = Token {
@@ -76,8 +80,8 @@ impl TryFrom<&[u8]> for Token {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum RawToken {
-    Identifier(String),
-    ExternalIdentifier(Vec<String>),
+    Identifier(String, Option<Vec<Type>>),
+    ExternalIdentifier(Vec<String>, Option<Vec<Type>>),
 
     Header(Header),
     Key(Key),
@@ -104,8 +108,19 @@ impl fmt::Display for RawToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use RawToken::*;
         match self {
-            Identifier(ident) => f.write_str(ident),
-            ExternalIdentifier(entries) => f.write_str(&entries.join(":")),
+            Identifier(ident, anot) => write!(
+                f,
+                "{}<{}>",
+                ident,
+                anot.as_ref()
+                    .map(|a| a.as_slice())
+                    .unwrap_or(&[])
+                    .iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            ExternalIdentifier(entries, anot) => f.write_str(&entries.join(":")),
             Header(h) => h.fmt(f),
             Key(key) => key.fmt(f),
             Inlined(inlined) => inlined.fmt(f),
@@ -128,7 +143,7 @@ impl PartialEq for Token {
     }
 }
 
-pub const ALLOWED_IDENTIFIER_CHARACTERS: &[u8] = b"abcdefghijklmnopqrstuvwxyz1234567890_";
+pub const ALLOWED_IDENTIFIER_CHARACTERS: &[u8] = b"abcdefghijklmnopqrstuvwxyz1234567890-_<>";
 pub fn is_valid_identifier(ident: &str) -> bool {
     for c in ident.bytes() {
         if !ALLOWED_IDENTIFIER_CHARACTERS.contains(&c) {

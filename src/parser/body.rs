@@ -1,7 +1,7 @@
 pub use super::FunctionBuilder;
 use crate::ir::bridge;
 use crate::parser::tokenizer::{is_valid_identifier, Key, Operator, RawToken, Token};
-use crate::parser::{IdentSource, ParseError, ParseFault};
+use crate::parser::{annotation, IdentSource, ParseError, ParseFault};
 use std::cell::RefCell;
 
 mod first;
@@ -55,10 +55,25 @@ pub trait BodySource {
     fn walk(&mut self, mode: Mode) -> Result<WalkResult, ParseError> {
         let token = match self.next() {
             Some(t) => {
+                /*
                 if t.inner == RawToken::NewLine {
                     return self.walk(mode).map_err(|e| e.fallback(t.source_index));
                 } else {
                     t
+                }
+                */
+                match t.inner {
+                    RawToken::NewLine => {
+                        return self.walk(mode).map_err(|e| e.fallback(t.source_index))
+                    }
+                    RawToken::Identifier(ident, _) => {
+                        let source = t.source_index;
+                        Token::new(
+                            annotation::into_annotated(ident).map_err(|e| e.to_err(source))?,
+                            t.source_index,
+                        )
+                    }
+                    _ => t,
                 }
             }
             None => {
@@ -124,7 +139,10 @@ pub trait BodySource {
                     let operation = |left: Token, op: (Operator, usize), right| {
                         Token::new(
                             RawToken::Parameterized(
-                                Box::new(Token::new(RawToken::Identifier(op.0.identifier), op.1)),
+                                Box::new(Token::new(
+                                    RawToken::Identifier(op.0.identifier, None),
+                                    op.1,
+                                )),
                                 vec![left, right],
                                 RefCell::default(),
                             ),
@@ -201,7 +219,7 @@ pub trait BodySource {
                         let source = left.source_index;
                         Token::new(
                             RawToken::Parameterized(
-                                Box::new(Token::new(RawToken::Identifier(op), source)),
+                                Box::new(Token::new(RawToken::Identifier(op, None), source)),
                                 vec![left, right],
                                 RefCell::default(),
                             ),
@@ -241,7 +259,10 @@ pub trait BodySource {
                         let source = left.source_index;
                         let operation = Token::new(
                             RawToken::Parameterized(
-                                Box::new(Token::new(RawToken::Identifier(op.0.identifier), source)),
+                                Box::new(Token::new(
+                                    RawToken::Identifier(op.0.identifier, None),
+                                    source,
+                                )),
                                 vec![left, reconstruct],
                                 RefCell::default(),
                             ),
@@ -251,7 +272,7 @@ pub trait BodySource {
                     }
                 }
             }
-            RawToken::Identifier(ident) => {
+            RawToken::Identifier(ident, anot) => {
                 if !is_valid_identifier(&ident) {
                     return ParseFault::InvalidIdentifier(ident, IdentSource::Ident)
                         .to_err(token.source_index)
@@ -259,10 +280,10 @@ pub trait BodySource {
                 };
                 self.handle_ident(
                     mode,
-                    Token::new(RawToken::Identifier(ident), token.source_index),
+                    Token::new(RawToken::Identifier(ident, anot), token.source_index),
                 )
             }
-            RawToken::ExternalIdentifier(entries) => {
+            RawToken::ExternalIdentifier(entries, anot) => {
                 if !is_valid_identifier(&entries[0]) {
                     return ParseFault::InvalidIdentifier(entries[0].clone(), IdentSource::Module)
                         .to_err(token.source_index)
@@ -287,7 +308,10 @@ pub trait BodySource {
                             .to_err(token.source_index)
                             .into();
                     }
-                    Token::new(RawToken::ExternalIdentifier(entries), token.source_index)
+                    Token::new(
+                        RawToken::ExternalIdentifier(entries, anot),
+                        token.source_index,
+                    )
                 };
                 self.handle_ident(mode, t)
             }
@@ -303,7 +327,10 @@ pub trait BodySource {
                     Mode::Operator(left, op) => {
                         let operation = Token::new(
                             RawToken::Parameterized(
-                                Box::new(Token::new(RawToken::Identifier(op.0.identifier), op.1)),
+                                Box::new(Token::new(
+                                    RawToken::Identifier(op.0.identifier, None),
+                                    op.1,
+                                )),
                                 vec![left, v],
                                 RefCell::default(),
                             ),
@@ -325,7 +352,10 @@ pub trait BodySource {
                     Mode::Operator(left, op) => {
                         let operation = Token::new(
                             RawToken::Parameterized(
-                                Box::new(Token::new(RawToken::Identifier(op.0.identifier), op.1)),
+                                Box::new(Token::new(
+                                    RawToken::Identifier(op.0.identifier, None),
+                                    op.1,
+                                )),
                                 vec![left, v],
                                 RefCell::default(),
                             ),
@@ -347,7 +377,10 @@ pub trait BodySource {
                     Mode::Operator(left, op) => {
                         let operation = Token::new(
                             RawToken::Parameterized(
-                                Box::new(Token::new(RawToken::Identifier(op.0.identifier), op.1)),
+                                Box::new(Token::new(
+                                    RawToken::Identifier(op.0.identifier, None),
+                                    op.1,
+                                )),
                                 vec![left, v],
                                 RefCell::default(),
                             ),
@@ -388,7 +421,7 @@ pub trait BodySource {
                 let next = self.next().ok_or_else(|| {
                     ParseFault::EndedWhileExpecting(vec![
                         RawToken::Key(Key::ParenOpen),
-                        RawToken::Identifier("function name".to_owned()),
+                        RawToken::Identifier("function name".to_owned(), None),
                     ])
                     .to_err(token.source_index)
                 })?;
@@ -409,7 +442,7 @@ pub trait BodySource {
                             }
                         }
                     }
-                    RawToken::Identifier(_ident) => next,
+                    RawToken::Identifier(_ident, _anot) => next,
                     _ => panic!("ET: {:?} cannot be passed as closure", next.inner),
                 };
                 let completed = Token::new(RawToken::ByPointer(Box::new(to_pass)), source);
@@ -422,7 +455,10 @@ pub trait BodySource {
                     Mode::Operator(left, op) => {
                         let operation = Token::new(
                             RawToken::Parameterized(
-                                Box::new(Token::new(RawToken::Identifier(op.0.identifier), op.1)),
+                                Box::new(Token::new(
+                                    RawToken::Identifier(op.0.identifier, None),
+                                    op.1,
+                                )),
                                 vec![left, completed],
                                 RefCell::default(),
                             ),
@@ -497,7 +533,7 @@ pub trait BodySource {
                             let operation = Token::new(
                                 RawToken::Parameterized(
                                     Box::new(Token::new(
-                                        RawToken::Identifier(op.0.identifier),
+                                        RawToken::Identifier(op.0.identifier, None),
                                         op.1,
                                     )),
                                     vec![left, v],
@@ -507,11 +543,11 @@ pub trait BodySource {
                             );
                             self.handle_after(operation)
                         }
-                        RawToken::Identifier(_n) => {
+                        RawToken::Identifier(_n, None) => {
                             let operation = Token::new(
                                 RawToken::Parameterized(
                                     Box::new(Token::new(
-                                        RawToken::Identifier(op.0.identifier),
+                                        RawToken::Identifier(op.0.identifier, None),
                                         op.1,
                                     )),
                                     vec![left, v],

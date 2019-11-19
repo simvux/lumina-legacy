@@ -6,6 +6,7 @@ pub fn build<S: BodySource + ?Sized>(source: &mut S) -> Result<(String, Token), 
         None => {
             return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
                 "where statement identifier".into(),
+                None,
             )])
             .to_err(0)
             .into()
@@ -13,11 +14,14 @@ pub fn build<S: BodySource + ?Sized>(source: &mut S) -> Result<(String, Token), 
         Some(t) => t,
     };
     let identifier = match t.inner {
-        RawToken::Identifier(ident) => ident,
+        RawToken::Identifier(ident, anot) => ident,
         _ => {
             return ParseFault::GotButExpected(
                 t.inner,
-                vec![RawToken::Identifier("where statement identifier".into())],
+                vec![RawToken::Identifier(
+                    "where statement identifier".into(),
+                    None,
+                )],
             )
             .to_err(t.source_index)
             .into()

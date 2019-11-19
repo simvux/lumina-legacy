@@ -12,7 +12,7 @@ impl IrBuilder {
                     .map(|t| self.token_to_ir(source, &t.inner))
                     .collect::<Vec<ir::Entity>>();
                 match &takes.inner {
-                    RawToken::Identifier(ident) => {
+                    RawToken::Identifier(ident, anot) => {
                         let ptypes: &[Type] = &param_types.borrow();
                         let (newfid, (newfuncid, generics)) = self.parser.modules[source.fid()]
                             .function_ids
@@ -46,7 +46,7 @@ impl IrBuilder {
                         let findex = self.gen_id(Cow::Owned(source));
                         ir::Entity::FunctionCall(findex as u32, params)
                     }
-                    RawToken::ExternalIdentifier(entries) => {
+                    RawToken::ExternalIdentifier(entries, anot) => {
                         let ptypes: &[Type] = &param_types.borrow();
                         let newfid = self.parser.modules[source.fid()].imports[&entries[0]];
                         let (funcid, generics) = super::generics::generic_search(
@@ -69,7 +69,7 @@ impl IrBuilder {
                 }
             }
             // Either constant or parameter
-            RawToken::Identifier(ident) => {
+            RawToken::Identifier(ident, anot) => {
                 const NO_PARAMS: &[Type] = &[];
                 let func = source.func(&self.parser);
                 for (i, param) in func.parameter_names.iter().enumerate() {
@@ -86,7 +86,7 @@ impl IrBuilder {
                 )
             }
             // External Constant
-            RawToken::ExternalIdentifier(entries) => {
+            RawToken::ExternalIdentifier(entries, anot) => {
                 const NO_PARAMS: &[Type] = &[];
                 let newfid = self.parser.modules[source.fid()].imports[&entries[0]];
                 let newfuncid = self.parser.modules[newfid].function_ids[&entries[1]][NO_PARAMS];

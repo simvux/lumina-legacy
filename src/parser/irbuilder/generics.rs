@@ -3,6 +3,16 @@ use crate::parser::{
 };
 use std::collections::HashMap;
 
+// TODO TODO TODO
+// Ok I just relized how stupid the way I'm doing this is.
+// I should just be making lookups of all the possible generic variants.
+// Instead of iterating through literally everything.
+//
+// or actually. Maybe it's not to bad to iterate like this? I'm only iterating through all with
+// matching identifier.
+//
+// Nah I think direct lookups will be easier
+
 #[derive(Debug)]
 pub struct Generics {
     inner: Vec<Type>,
