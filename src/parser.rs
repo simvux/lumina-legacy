@@ -49,7 +49,6 @@ pub struct ParseModule {
 }
 
 impl ParseModule {
-    // TODO: Remove module_path? In most cases we can reach from the fid anyway
     pub fn new(module_path: FileSource) -> Self {
         Self {
             function_ids: HashMap::new(),
@@ -60,33 +59,6 @@ impl ParseModule {
             module_path,
         }
     }
-
-    /*
-    fn find_function(
-        &self,
-        ident: &[String],
-        params: &[Type],
-    ) -> Result<(usize, usize), ParseFault> {
-        let fid = if ident.len() == 1 {
-            self.fid
-        } else {
-            assert_eq!(ident.len(), 2); // ET?
-            match self.imports.get(&ident[0]) {
-                Some(a) => *a,
-                None => return Err(ParseFault::ModuleNotImported(ident[0].clone())),
-            }
-            // .ok_or_else(|| ParseFault::ModuleNotImported(ident[0].clone()))?
-        };
-        let variants = self
-            .function_ids
-            .get(&ident[0])
-            .ok_or_else(|| ParseFault::FunctionNotFound(ident[0], fid))?;
-        let funcid = *variants
-            .get(params)
-            .ok_or_else(|| ParseFault::FunctionVariantNotFound(ident[0], params.to_vec(), fid))?;
-        Ok((fid, funcid))
-    }
-    */
 }
 
 impl Parser {
