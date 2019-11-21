@@ -7,44 +7,40 @@ impl IrBuilder {
     // pub fn type_check(&self, token: &Token, fid: usize, funcid: usize) -> Result<Type, ParseError> {
     pub fn type_check(&self, token: &Token, source: &FunctionSource) -> Result<Type, ParseError> {
         let r#type = match &token.inner {
-            RawToken::Inlined(inlined) => match inlined {
-                Inlined::Int(_) => Type::Int,
-                Inlined::Float(_) => Type::Float,
-                Inlined::Bool(_) => Type::Bool,
-                Inlined::Nothing => Type::Nothing,
-            },
+            RawToken::Inlined(inlined) => {
+                debug!("Handing type of inlined value {}\n", inlined);
+                match inlined {
+                    Inlined::Int(_) => Type::Int,
+                    Inlined::Float(_) => Type::Float,
+                    Inlined::Bool(_) => Type::Bool,
+                    Inlined::Nothing => Type::Nothing,
+                }
+            }
             RawToken::Unimplemented => source.returns(&self.parser).clone(),
             RawToken::ByPointer(box t) => {
                 match &t.inner {
                     RawToken::Identifier(ident, anot) => {
                         // let func = &self.parser.modules[fid].functions[funcid];
                         let func = source.func(&self.parser);
-                        if let Some(paramid) = func.get_parameter(ident) {
-                            let param = func.get_parameter_type(paramid);
-                            if let Type::Function(_) = param {
-                                param.clone()
-                            } else {
-                                panic!("ET: the value {:?} cannot be passed as closure", param)
+                        if ident.len() == 1 {
+                            if let Some(paramid) = func.get_parameter(&ident[0]) {
+                                let param = func.get_parameter_type(paramid);
+                                if let Type::Function(_) = param {
+                                    return Ok(param.clone());
+                                } else {
+                                    panic!("ET: the value {:?} cannot be passed as closure", param)
+                                }
                             }
-                        } else {
-                            unimplemented!();
                         }
-                    }
-                    RawToken::ExternalIdentifier(entries, anot) => {
-                        let newfid = self.parser.modules[source.fid()]
-                            .imports
-                            .get(&entries[0])
-                            .ok_or_else(|| {
-                                ParseFault::ModuleNotImported(entries[0].clone())
-                                    .to_err(token.source_index)
-                            })?;
                         unimplemented!();
                     }
-                    // TODO: Parameterized()
-                    _ => panic!("{:?} cannot be passed as closure", t.inner), // ET? I think body.rs already handles faults here
+                    _ => unimplemented!(),
                 }
             }
-            RawToken::RustCall(_bridged_id, r#type) => r#type.clone(),
+            RawToken::RustCall(_bridged_id, r#type) => {
+                debug!("Handing type of rustcall constant {}\n", r#type);
+                r#type.clone()
+            }
             RawToken::FirstStatement(entries) => {
                 for entry in entries[0..entries.len() - 1].iter() {
                     self.type_check(entry, source)?;
@@ -55,6 +51,7 @@ impl IrBuilder {
                 let mut param_types = match p_types.try_borrow_mut() {
                     Ok(a) => a,
                     Err(_) => {
+                        debug!("Skipping type check of {:?}", entry);
                         // If it's already borrowed then that means that this is a recursive call.
                         // Therefore we can assume that it's already being type checked!
                         return Ok(self.find_return_type(
@@ -68,59 +65,43 @@ impl IrBuilder {
                     for param in params.iter() {
                         param_types.push(self.type_check(param, source)?)
                     }
+                    debug!("Gathered new type-checked parameters {:?}\n", param_types);
+                } else {
+                    debug!("Using existing type-checked parameters {:?}\n", param_types);
                 }
                 drop(param_types);
                 match &entry.inner {
-                    RawToken::Identifier(ident, anot) => self
-                        .type_check_function(source.fid(), ident, &p_types.borrow())
-                        .map_err(|e| e.fallback(token.source_index))?,
-                    RawToken::ExternalIdentifier(entries, anot) => {
-                        let newfid = match self.parser.modules[source.fid()]
-                            .imports
-                            .get(&entries[0])
-                            .copied()
-                        {
-                            Some(fid) => fid,
-                            None => {
-                                return ParseFault::ModuleNotImported(entries[0].clone())
-                                    .to_err(token.source_index)
-                                    .into()
-                            }
-                        };
-                        self.type_check_function(newfid, &entries[1], &p_types.borrow())
+                    RawToken::Identifier(ident, anot) => {
+                        let param_types = p_types.borrow();
+                        debug!("Calling {} with {:?}\n", ident.join(":"), param_types);
+                        self.type_check_function_source(source.fid(), ident, &param_types)
                             .map_err(|e| e.fallback(token.source_index))?
                     }
-                    RawToken::RustCall(_bridged_id, r#type) => r#type.clone(),
+                    RawToken::RustCall(bridged_id, r#type) => {
+                        debug!("Handing type of rustcall {}\n", bridged_id);
+                        r#type.clone()
+                    }
                     _ => panic!("{:#?} cannot take parameters", entry.inner),
                 }
             }
             RawToken::Identifier(ident, anot) => {
-                {
+                if ident.len() == 1 {
                     let func = source.func(&self.parser);
-                    if let Some(paramid) = func.get_parameter(ident) {
-                        return Ok(func.get_parameter_type(paramid).clone());
+                    if let Some(paramid) = func.get_parameter(&ident[0]) {
+                        let r#type = func.get_parameter_type(paramid).clone();
+                        debug!(
+                            "{} was identified as parameter of type {}\n",
+                            ident.join(":"),
+                            r#type
+                        );
+                        return Ok(r#type);
                     };
                 }
 
                 // This is only for leaf constants. Since other functions will be RawToken::Parameterized
-                self.type_check_function(source.fid(), ident, &[])?
+                debug!("Checking if {} is a constant\n", ident.join(":"));
+                self.type_check_function_source(source.fid(), ident, &[])?
             }
-            RawToken::ExternalIdentifier(entries, anot) => {
-                let newfid = match self.parser.modules[source.fid()]
-                    .imports
-                    .get(&entries[0])
-                    .copied()
-                {
-                    Some(fid) => fid,
-                    None => {
-                        return ParseFault::ModuleNotImported(entries[0].clone())
-                            .to_err(token.source_index)
-                            .into()
-                    }
-                };
-                self.type_check_function(newfid, &entries[1], &[])?
-            }
-
             RawToken::IfExpression(expr) => {
                 let mut expect_type = None;
                 for (cond, eval) in expr.branches.iter() {
@@ -179,16 +160,26 @@ impl IrBuilder {
     pub fn find_matching_function(
         &self,
         self_fid: usize,
-        fid: usize,
-        funcname: &str,
+        // fid: usize,
+        ident: &[String],
         params: &[Type],
     ) -> Result<(usize, usize, Generics), ParseFault> {
+        let (fid, funcname) = if ident.len() == 1 {
+            (self_fid, &ident[0])
+        } else {
+            assert_eq!(ident.len(), 2); // ET?
+            let fid = *self.parser.modules[self_fid]
+                .imports
+                .get(&ident[0])
+                .ok_or_else(|| ParseFault::ModuleNotImported(ident[0].to_owned()))?;
+            (fid, &ident[1])
+        };
         let module = &self.parser.modules[fid];
         let variants = match module.function_ids.get(funcname) {
             None => {
                 return if fid == self_fid && fid != PRELUDE_FID {
                     // Wasn't found, Try prelude
-                    match self.find_matching_function(PRELUDE_FID, PRELUDE_FID, funcname, params)
+                    match self.find_matching_function(PRELUDE_FID, &[funcname.to_owned()], params)
                         // Switch out the PRELUDE fid's with this file's fids since it makes
                         // more sense to assume local over prelude.
                         // .map_err(|_| ParseFault::FunctionNotFound(funcname.to_string(), fid))
@@ -228,14 +219,17 @@ impl IrBuilder {
         let me = &self.parser.modules[fid];
         match t {
             RawToken::Identifier(ident, anot) => {
-                me.functions[me.function_ids[ident][params]].returns.clone()
-            }
-            RawToken::ExternalIdentifier(entries, anot) => {
-                let newfid = me.imports[&entries[0]];
-                let newme = &self.parser.modules[newfid];
-                newme.functions[newme.function_ids[&entries[1]][params]]
-                    .returns
-                    .clone()
+                if ident.len() == 1 {
+                    me.functions[me.function_ids[&ident[0]][params]]
+                        .returns
+                        .clone()
+                } else {
+                    let newfid = me.imports[&ident[0]];
+                    let newme = &self.parser.modules[newfid];
+                    newme.functions[newme.function_ids[&ident[1]][params]]
+                        .returns
+                        .clone()
+                }
             }
             _ => unimplemented!(),
         }

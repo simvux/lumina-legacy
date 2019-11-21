@@ -12,6 +12,7 @@ pub enum Type {
     Int,
     Float,
     Bool,
+    External(Box<(String, Type)>),
     Generic(u8),
     List(Box<Type>),
     Struct(i32, i32),
@@ -54,6 +55,19 @@ impl TryFrom<&str> for Type {
     }
 }
 
+impl TryFrom<Vec<String>> for Type {
+    type Error = ParseFault;
+
+    fn try_from(mut entries: Vec<String>) -> Result<Type, Self::Error> {
+        let r#type = Type::try_from(entries.last().unwrap().as_str())?;
+        if entries.len() == 1 {
+            Ok(r#type)
+        } else {
+            Ok(Type::External(Box::new((entries.remove(0), r#type))))
+        }
+    }
+}
+
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -74,6 +88,7 @@ impl fmt::Display for Type {
             ),
             Type::List(inner) => write!(f, "[{}]", inner.to_string()),
             Type::Struct(fid, tid) => write!(f, "Struct({}:{})", fid, tid),
+            Type::External(box (modname, t)) => write!(f, "{}:{}", modname, t.to_string()),
             Type::Custom(name) => write!(f, "unevaluated type {}", name),
         }
     }

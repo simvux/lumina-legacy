@@ -11,6 +11,8 @@ pub fn entrypoint() -> FileSource {
 macro_rules! debug {
     ($($arg:tt)*) => (
         #[cfg(debug_assertions)]
+        print!(" DBG -> ");
+        #[cfg(debug_assertions)]
         std::io::_print(std::format_args!($($arg)*));
     )
 }
@@ -64,6 +66,9 @@ fn main() {
             }
             Ok(ir) => ir,
         };
+    debug!("Initializing runtime");
+    drop(file_path);
+    drop(source_code);
 
     let runtime = interpreter::Runtime::new(ir);
     let entry = &runtime.instructions[entrypoint];

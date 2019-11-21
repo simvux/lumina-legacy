@@ -11,6 +11,7 @@ mod checker;
 mod fsource;
 pub mod generics;
 use fsource::FunctionSource;
+use generics::Generics;
 
 //#[derive(Debug)]
 pub struct IrBuilder {
@@ -45,7 +46,7 @@ impl IrBuilder {
         params: &[Type],
     ) -> Result<(Vec<ir::Entity>, usize), ParseError> {
         let (funcid, newfid, generics) = match self
-            .find_matching_function(fid, fid, funcname, params)
+            .find_matching_function(fid, &[funcname.to_owned()], params)
             .map_err(|e| {
                 e.to_err(0)
                     .with_source_load(&self.environment, &self.parser.modules[fid].module_path)
@@ -77,27 +78,40 @@ impl IrBuilder {
         ))
     }
 
+    fn type_check_function_source(
+        &self,
+        self_fid: usize,
+        ident: &[String],
+        params: &[Type],
+    ) -> Result<Type, ParseError> {
+        let coords = self
+            .find_matching_function(self_fid, ident, params)
+            .map_err(|e| e.to_err(0))?;
+        debug!(
+            "Found coords {}:{} where fname is {}\n",
+            coords.1, coords.0, &self.parser.modules[coords.0].functions[coords.1].name
+        );
+        self.type_check_function(coords.1, coords.0, coords.2)
+    }
+
     fn type_check_function(
         &self,
         fid: usize,
-        ident: &str,
-        params: &[Type],
+        funcid: usize,
+        generics: Generics,
     ) -> Result<Type, ParseError> {
-        let (funcid, newfid, generics) = self
-            .find_matching_function(fid, fid, ident, params)
-            .map_err(|e| {
-                e.to_err(0)
-                    .with_source_load(&self.environment, &self.parser.modules[fid].module_path)
-            })?;
-
-        // let func = &self.parser.modules[newfid].functions[funcid];
         let source = if generics.has_generics() {
             let mut new = self.parser.modules[fid].functions[funcid].clone();
             generics.replace_all(&mut new);
-            FunctionSource::Owned(newfid, new)
+            debug!(
+                "Generated new function source due to generics for {}:{}\n",
+                fid, funcid
+            );
+            FunctionSource::Owned(fid, new)
         } else {
-            FunctionSource::from((newfid, funcid))
+            FunctionSource::from((fid, funcid))
         };
+        debug!("Starting type check of {}:{}\n", fid, funcid);
         let actual_return_value = self.type_check(&source.body(&self.parser), &source)?;
         if actual_return_value != *source.returns(&self.parser) {
             return ParseFault::FnTypeReturnMismatch(
@@ -107,17 +121,21 @@ impl IrBuilder {
             .to_err(source.func(&self.parser).body.source_index)
             .into();
         }
-
+        debug!("Fetching findex of {}:{}\n", fid, funcid);
         match self.try_get_id(&source) {
             None => {
+                debug!("Making new findex for {}:{}\n", fid, funcid);
                 let findex = self.gen_id(Cow::Borrowed(&source));
                 let entry = self.token_to_ir(&source, &source.func(&self.parser).body.inner);
                 self.complete(findex, entry);
             }
             Some(findex) => {
                 if self.should_replace(findex) {
+                    debug!("Converting {}#{}:{} to llir\n", findex, fid, funcid);
                     let entry = self.token_to_ir(&source, &source.func(&self.parser).body.inner);
                     self.complete(findex, entry);
+                } else {
+                    debug!("Function {}:{} is already on the stack\n", fid, funcid);
                 }
             }
         }

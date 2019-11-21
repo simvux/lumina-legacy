@@ -67,7 +67,7 @@ impl TryFrom<&[u8]> for Token {
                 return RawToken::NewLine;
             }
 
-            RawToken::Identifier(String::from_utf8(bytes.to_vec()).unwrap(), None)
+            RawToken::Identifier(vec![String::from_utf8(bytes.to_vec()).unwrap()], None)
         };
 
         let t = Token {
@@ -80,8 +80,7 @@ impl TryFrom<&[u8]> for Token {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum RawToken {
-    Identifier(String, Option<Vec<Type>>),
-    ExternalIdentifier(Vec<String>, Option<Vec<Type>>),
+    Identifier(Vec<String>, Option<Vec<Type>>),
 
     Header(Header),
     Key(Key),
@@ -111,7 +110,7 @@ impl fmt::Display for RawToken {
             Identifier(ident, anot) => write!(
                 f,
                 "{}<{}>",
-                ident,
+                ident.join(":"),
                 anot.as_ref()
                     .map(|a| a.as_slice())
                     .unwrap_or(&[])
@@ -120,7 +119,6 @@ impl fmt::Display for RawToken {
                     .collect::<Vec<String>>()
                     .join(", ")
             ),
-            ExternalIdentifier(entries, anot) => f.write_str(&entries.join(":")),
             Header(h) => h.fmt(f),
             Key(key) => key.fmt(f),
             Inlined(inlined) => inlined.fmt(f),

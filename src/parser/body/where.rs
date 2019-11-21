@@ -5,7 +5,7 @@ pub fn build<S: BodySource + ?Sized>(source: &mut S) -> Result<(String, Token), 
     let t = match source.next() {
         None => {
             return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
-                "where statement identifier".into(),
+                vec!["where statement identifier".into()],
                 None,
             )])
             .to_err(0)
@@ -14,12 +14,17 @@ pub fn build<S: BodySource + ?Sized>(source: &mut S) -> Result<(String, Token), 
         Some(t) => t,
     };
     let identifier = match t.inner {
-        RawToken::Identifier(ident, anot) => ident,
+        RawToken::Identifier(mut ident, _) => {
+            if ident.len() != 1 {
+                panic!("ET: Where identifier cannot be external");
+            }
+            ident.remove(0)
+        }
         _ => {
             return ParseFault::GotButExpected(
                 t.inner,
                 vec![RawToken::Identifier(
-                    "where statement identifier".into(),
+                    vec!["where statement identifier".into()],
                     None,
                 )],
             )

@@ -82,7 +82,7 @@ pub enum ParseFault {
     InvalidIdentifier(String, IdentSource),
     InvalidPath(Vec<String>),
     BridgedWrongPathLen(Vec<String>),
-    BridgedFunctionNotFound(String, u16),
+    BridgedFunctionNotFound(String),
     BridgedFunctionNoMode(u8),
     Unexpected(RawToken),
     Unmatched(Key),
@@ -163,7 +163,7 @@ impl fmt::Display for ParseError {
         match &self.variant {
             InvalidPath(entries) => write!(f, "`{}` is not a valid module path", entries.join(":")),
             BridgedWrongPathLen(entries) => write!(f, "`{}` wrong length of path", entries.join(":")),
-            BridgedFunctionNotFound(ident, param_amount) => write!(f, "No bridged function named `{}` takes {} parameters", ident, param_amount),
+            BridgedFunctionNotFound(ident) => write!(f, "No bridged function named `{}`", ident),
             BridgedFunctionNoMode(c) => write!(f, "Bridged path mode doesn't exist, got `{}`", c),
             Unexpected(t) => write!(f, "Unexpected {}", t),
             Unmatched(k) => write!(f, "Unmatched {}", k),

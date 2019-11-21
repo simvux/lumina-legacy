@@ -140,7 +140,7 @@ pub trait BodySource {
                         Token::new(
                             RawToken::Parameterized(
                                 Box::new(Token::new(
-                                    RawToken::Identifier(op.0.identifier, None),
+                                    RawToken::Identifier(vec![op.0.identifier], None),
                                     op.1,
                                 )),
                                 vec![left, right],
@@ -229,11 +229,11 @@ pub trait BodySource {
 
                     match self.walk(Mode::Neutral)? {
                         WalkResult::Value(t) => {
-                            let operation = operation(left, op.0.identifier, t);
+                            let operation = operation(left, vec![op.0.identifier], t);
                             self.handle_after(operation)
                         }
                         WalkResult::CloseParen(t) => {
-                            let operation = operation(left, op.0.identifier, t.unwrap());
+                            let operation = operation(left, vec![op.0.identifier], t.unwrap());
                             self.handle_after(operation)
                         }
                         WalkResult::EOF => ParseFault::MissingRightSideOperator(Box::new((
@@ -260,7 +260,7 @@ pub trait BodySource {
                         let operation = Token::new(
                             RawToken::Parameterized(
                                 Box::new(Token::new(
-                                    RawToken::Identifier(op.0.identifier, None),
+                                    RawToken::Identifier(vec![op.0.identifier], None),
                                     source,
                                 )),
                                 vec![left, reconstruct],
@@ -273,47 +273,23 @@ pub trait BodySource {
                 }
             }
             RawToken::Identifier(ident, anot) => {
-                if !is_valid_identifier(&ident) {
-                    return ParseFault::InvalidIdentifier(ident, IdentSource::Ident)
-                        .to_err(token.source_index)
-                        .into();
-                };
-                self.handle_ident(
-                    mode,
-                    Token::new(RawToken::Identifier(ident, anot), token.source_index),
-                )
-            }
-            RawToken::ExternalIdentifier(entries, anot) => {
-                if !is_valid_identifier(&entries[0]) {
-                    return ParseFault::InvalidIdentifier(entries[0].clone(), IdentSource::Module)
-                        .to_err(token.source_index)
-                        .into();
-                };
-                if !is_valid_identifier(&entries[1]) {
-                    return ParseFault::InvalidIdentifier(entries[1].clone(), IdentSource::Ident)
-                        .to_err(token.source_index)
-                        .into();
-                };
-                let source_index = token.source_index;
-                let t = if let Some((bridged_id, bridged_type)) =
-                    bridge::try_rust_builtin(&entries).map_err(|e| e.to_err(source_index))?
-                {
-                    Token::new(
-                        RawToken::RustCall(bridged_id, bridged_type),
-                        token.source_index,
-                    )
-                } else {
-                    if entries.len() != 2 {
-                        return ParseFault::InvalidPath(entries)
+                for s in ident.iter() {
+                    if !is_valid_identifier(&s) {
+                        return ParseFault::InvalidIdentifier(s.to_owned(), IdentSource::Ident)
                             .to_err(token.source_index)
                             .into();
-                    }
-                    Token::new(
-                        RawToken::ExternalIdentifier(entries, anot),
-                        token.source_index,
-                    )
+                    };
+                }
+                let source = token.source_index;
+                let t = if let Some(func) =
+                    bridge::try_rust_builtin(&ident).map_err(|e| e.to_err(source))?
+                {
+                    RawToken::RustCall(func.0, func.1)
+                } else {
+                    RawToken::Identifier(ident, anot)
                 };
-                self.handle_ident(mode, t)
+
+                self.handle_ident(mode, Token::new(t, token.source_index))
             }
             RawToken::Key(Key::ListOpen) => {
                 let list = list::build(self).map_err(|e| e.fallback(token.source_index))?;
@@ -328,7 +304,7 @@ pub trait BodySource {
                         let operation = Token::new(
                             RawToken::Parameterized(
                                 Box::new(Token::new(
-                                    RawToken::Identifier(op.0.identifier, None),
+                                    RawToken::Identifier(vec![op.0.identifier], None),
                                     op.1,
                                 )),
                                 vec![left, v],
@@ -353,7 +329,7 @@ pub trait BodySource {
                         let operation = Token::new(
                             RawToken::Parameterized(
                                 Box::new(Token::new(
-                                    RawToken::Identifier(op.0.identifier, None),
+                                    RawToken::Identifier(vec![op.0.identifier], None),
                                     op.1,
                                 )),
                                 vec![left, v],
@@ -378,7 +354,7 @@ pub trait BodySource {
                         let operation = Token::new(
                             RawToken::Parameterized(
                                 Box::new(Token::new(
-                                    RawToken::Identifier(op.0.identifier, None),
+                                    RawToken::Identifier(vec![op.0.identifier], None),
                                     op.1,
                                 )),
                                 vec![left, v],
@@ -421,7 +397,7 @@ pub trait BodySource {
                 let next = self.next().ok_or_else(|| {
                     ParseFault::EndedWhileExpecting(vec![
                         RawToken::Key(Key::ParenOpen),
-                        RawToken::Identifier("function name".to_owned(), None),
+                        RawToken::Identifier(vec!["function name".to_owned()], None),
                     ])
                     .to_err(token.source_index)
                 })?;
@@ -456,7 +432,7 @@ pub trait BodySource {
                         let operation = Token::new(
                             RawToken::Parameterized(
                                 Box::new(Token::new(
-                                    RawToken::Identifier(op.0.identifier, None),
+                                    RawToken::Identifier(vec![op.0.identifier], None),
                                     op.1,
                                 )),
                                 vec![left, completed],
@@ -533,7 +509,7 @@ pub trait BodySource {
                             let operation = Token::new(
                                 RawToken::Parameterized(
                                     Box::new(Token::new(
-                                        RawToken::Identifier(op.0.identifier, None),
+                                        RawToken::Identifier(vec![op.0.identifier], None),
                                         op.1,
                                     )),
                                     vec![left, v],
@@ -547,7 +523,7 @@ pub trait BodySource {
                             let operation = Token::new(
                                 RawToken::Parameterized(
                                     Box::new(Token::new(
-                                        RawToken::Identifier(op.0.identifier, None),
+                                        RawToken::Identifier(vec![op.0.identifier], None),
                                         op.1,
                                     )),
                                     vec![left, v],

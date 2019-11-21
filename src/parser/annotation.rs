@@ -1,7 +1,8 @@
 use super::{BodySource, Key, ParseError, ParseFault, RawToken, Token, Tokenizer, Type};
 use std::convert::TryFrom;
 
-pub fn into_annotated(s: String) -> Result<RawToken, ParseFault> {
+pub fn into_annotated(mut path: Vec<String>) -> Result<RawToken, ParseFault> {
+    let s = path.as_slice().last().unwrap();
     for (i, c) in s.bytes().enumerate() {
         if c == b'<' {
             for (i2, c2) in s[i..].bytes().enumerate() {
@@ -12,7 +13,10 @@ pub fn into_annotated(s: String) -> Result<RawToken, ParseFault> {
                     for ent in anot.split(',') {
                         anot_buf.push(Type::try_from(ent)?)
                     }
-                    return Ok(RawToken::Identifier(ident.to_string(), Some(anot_buf)));
+                    let ident = ident.to_owned();
+                    path.pop();
+                    path.push(ident);
+                    return Ok(RawToken::Identifier(path, Some(anot_buf)));
                 }
             }
             panic!("Unmatched >")
@@ -21,7 +25,7 @@ pub fn into_annotated(s: String) -> Result<RawToken, ParseFault> {
             panic!("Unmatched < (<> are used for type annotations, if you intend to use an operator then put a space between the words)");
         }
     }
-    Ok(RawToken::Identifier(s, None))
+    Ok(RawToken::Identifier(path, None))
 }
 
 pub fn annotated(t: Token) -> Result<Token, ParseFault> {

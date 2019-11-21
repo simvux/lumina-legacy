@@ -49,6 +49,7 @@ pub struct ParseModule {
 }
 
 impl ParseModule {
+    // TODO: Remove module_path? In most cases we can reach from the fid anyway
     pub fn new(module_path: FileSource) -> Self {
         Self {
             function_ids: HashMap::new(),
@@ -59,6 +60,33 @@ impl ParseModule {
             module_path,
         }
     }
+
+    /*
+    fn find_function(
+        &self,
+        ident: &[String],
+        params: &[Type],
+    ) -> Result<(usize, usize), ParseFault> {
+        let fid = if ident.len() == 1 {
+            self.fid
+        } else {
+            assert_eq!(ident.len(), 2); // ET?
+            match self.imports.get(&ident[0]) {
+                Some(a) => *a,
+                None => return Err(ParseFault::ModuleNotImported(ident[0].clone())),
+            }
+            // .ok_or_else(|| ParseFault::ModuleNotImported(ident[0].clone()))?
+        };
+        let variants = self
+            .function_ids
+            .get(&ident[0])
+            .ok_or_else(|| ParseFault::FunctionNotFound(ident[0], fid))?;
+        let funcid = *variants
+            .get(params)
+            .ok_or_else(|| ParseFault::FunctionVariantNotFound(ident[0], params.to_vec(), fid))?;
+        Ok((fid, funcid))
+    }
+    */
 }
 
 impl Parser {
@@ -195,11 +223,11 @@ impl Parser {
                     }
                     Header::Use => {
                         let import = match tokenizer.next().map(|t| t.inner) {
-                            Some(RawToken::Identifier(single, anot)) => vec![single],
-                            Some(RawToken::ExternalIdentifier(entries, anot)) => entries,
+                            Some(RawToken::Identifier(single, anot)) => single,
+                            // Some(RawToken::ExternalIdentifier(entries, anot)) => entries,
                             None => {
                                 return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
-                                    "identifier".into(),
+                                    vec!["identifier".into()],
                                     None,
                                 )])
                                 .to_err(tokenizer.index() - 1)
@@ -268,15 +296,6 @@ impl Parser {
         }
     }
 
-    /*
-    pub fn type_check(self, fid: usize) -> Result<Vec<Token>, ParseError> {
-        // let entry_id = self.modules[fid].function_ids["main"][&vec![]];
-        let checker = TypeChecker::new(self);
-        let entrypoints = checker.run(fid, "main", vec![])?;
-        Ok(entrypoints)
-    }
-    */
-
     fn parse_type_decl(
         &mut self,
         tokenizer: &mut Tokenizer,
@@ -284,7 +303,7 @@ impl Parser {
         let first = match tokenizer.next() {
             None => {
                 return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
-                    "custom type name".into(),
+                    vec!["custom type name".into()],
                     None,
                 )])
                 .to_err(0)
@@ -293,7 +312,13 @@ impl Parser {
             Some(t) => t,
         };
         let type_name = match first.inner {
-            RawToken::Identifier(name, anot) => name,
+            RawToken::Identifier(mut name, anot) => {
+                if name.len() != 1 {
+                    panic!("ET: Type name cannot be external");
+                } else {
+                    name.remove(0)
+                }
+            }
             _ => panic!("ERROR_TODO: Wanted type name, got {:?}", first),
         };
         let mut fields = Vec::new();
@@ -305,7 +330,13 @@ impl Parser {
 
             let next = tokenizer.next().expect("ERROR_TODO: File ended");
             let field_name = match next.inner {
-                RawToken::Identifier(field_name, anot) => field_name,
+                RawToken::Identifier(mut field_name, anot) => {
+                    if field_name.len() != 1 {
+                        panic!("ET: Custom Type name cannot be external");
+                    } else {
+                        field_name.remove(0)
+                    }
+                }
                 RawToken::Header(h) => {
                     tokenizer.regress(h.as_str().len() + 1);
                     break;
@@ -314,10 +345,9 @@ impl Parser {
             };
             let next = tokenizer.next().expect("ERROR_TODO");
             match next.inner {
-                RawToken::Identifier(type_name, anot) => fields.push((
-                    field_name.to_owned(),
-                    Type::try_from(type_name.as_str()).unwrap(),
-                )),
+                RawToken::Identifier(type_name, anot) => {
+                    fields.push((field_name.to_owned(), Type::try_from(type_name).unwrap()))
+                }
                 _ => panic!(
                     "ERROR_TODO: Invalid syntax in field decleration, got {:?}",
                     next

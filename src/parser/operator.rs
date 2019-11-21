@@ -41,7 +41,7 @@ impl FunctionBuilder {
             let next = match tokenizer.next() {
                 None => {
                     return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
-                        "type expected to the left side of the operator".into(),
+                        vec!["type".into()],
                         None,
                     )])
                     .to_err(0)
@@ -52,14 +52,14 @@ impl FunctionBuilder {
             let source_index = next.source_index;
             if let RawToken::Identifier(ident, anot) = next.inner {
                 Ok((
-                    Type::try_from(ident.as_str()).map_err(|e| e.to_err(source_index))?,
+                    Type::try_from(ident).map_err(|e| e.to_err(source_index))?,
                     next.source_index,
                 ))
             } else {
                 ParseFault::GotButExpected(
                     next.inner,
                     vec![RawToken::Identifier(
-                        "type expected to the left side of the operator".into(),
+                        vec!["type expected to the left side of the operator".into()],
                         None,
                     )],
                 )

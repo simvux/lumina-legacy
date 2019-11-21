@@ -1,5 +1,4 @@
 mod token;
-use super::annotation;
 use std::convert::TryFrom;
 pub use token::{
     is_valid_identifier, Header, Inlined, Key, Operator, RawToken, Token,
@@ -180,32 +179,26 @@ impl<'s> super::body::BodySource for Tokenizer<'s> {
             .ok()
             .map(|t| t.with_source_index(source_index))?;
 
-        if let RawToken::Identifier(ident, _anot) = &t.inner {
-            // This is a little hacked together but the edge case is that `a:b` is an external call
-            // while `a: b` is a lambda/matchbranch/whatever.
-            let mut spl = ident.split(':');
-            let first = spl.next().unwrap();
-            if let Some(second) = spl.next() {
-                if second.is_empty() {
-                    // edge-case for `valid_ident: unrelated_code`
-                    self.regress(1);
-                    let new = &ident[0..ident.len() - 1];
-                    return Some(Token::new(
-                        RawToken::Identifier(new.to_owned(), None),
-                        source_index,
-                    ));
-                }
-                let mut identbuf = vec![first.to_owned(), second.to_owned()];
-                for additional in spl {
-                    identbuf.push(additional.to_owned());
-                }
+        if let RawToken::Identifier(entries, _anot) = &mut t.inner {
+            let mut spl = entries[0].split(':');
 
-                t.inner = RawToken::ExternalIdentifier(identbuf, None);
-                return Some(t);
-            } else {
-                return Some(t);
+            // TODO: Can avoid allocations
+            let mut buf: Vec<String> = Vec::new();
+            buf.push(spl.next().unwrap().to_owned());
+
+            for additional in spl {
+                if additional.is_empty() {
+                    // for overflow in spl {
+                    //     self.regress(overflow.len() + 1);
+                    // }
+                    *entries = buf;
+                    return Some(t);
+                }
+                buf.push(additional.to_string());
             }
+            *entries = buf;
         }
+
         Some(t)
     }
     fn undo(&mut self) {
