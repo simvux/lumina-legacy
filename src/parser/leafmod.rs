@@ -1,4 +1,6 @@
+use super::{FunctionBuilder, Type};
 use crate::env::Environment;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::path::PathBuf;
@@ -8,6 +10,31 @@ pub enum FileSource {
     Project(Vec<String>),
     Leafpath(Vec<String>),
     Prelude,
+}
+
+pub struct ParseModule {
+    //                     identifer       parameters
+    pub function_ids: HashMap<String, HashMap<Vec<Type>, usize>>,
+    pub functions: Vec<FunctionBuilder>,
+
+    pub types: HashMap<String, usize>,
+    pub type_fields: Vec<Vec<(String, Type)>>,
+    pub imports: HashMap<String, usize>,
+
+    pub module_path: FileSource,
+}
+
+impl ParseModule {
+    pub fn new(module_path: FileSource) -> Self {
+        Self {
+            function_ids: HashMap::new(),
+            functions: Vec::new(),
+            types: HashMap::new(),
+            type_fields: Vec::new(),
+            imports: HashMap::new(),
+            module_path,
+        }
+    }
 }
 
 impl FileSource {

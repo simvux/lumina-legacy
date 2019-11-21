@@ -1,4 +1,4 @@
-use super::ParseFault;
+use super::{BodySource, ParseError, ParseFault, RawToken, Tokenizer};
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -24,6 +24,66 @@ impl std::default::Default for Type {
     fn default() -> Self {
         Type::Nothing
     }
+}
+
+pub fn parse_type_decl(
+    tokenizer: &mut Tokenizer,
+) -> Result<(String, Vec<(String, Type)>), ParseError> {
+    let first = match tokenizer.next() {
+        None => {
+            return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
+                vec!["custom type name".into()],
+                None,
+            )])
+            .to_err(0)
+            .into()
+        }
+        Some(t) => t,
+    };
+    let type_name = match first.inner {
+        RawToken::Identifier(mut name, anot) => {
+            if name.len() != 1 {
+                panic!("ET: Type name cannot be external");
+            } else {
+                name.remove(0)
+            }
+        }
+        _ => panic!("ERROR_TODO: Wanted type name, got {:?}", first),
+    };
+    let mut fields = Vec::new();
+    loop {
+        if tokenizer.next().map(|t| t.inner) != Some(RawToken::NewLine) {
+            panic!("Expected newline")
+        }
+        tokenizer.skip_spaces_and_newlines();
+
+        let next = tokenizer.next().expect("ERROR_TODO: File ended");
+        let field_name = match next.inner {
+            RawToken::Identifier(mut field_name, anot) => {
+                if field_name.len() != 1 {
+                    panic!("ET: Custom Type name cannot be external");
+                } else {
+                    field_name.remove(0)
+                }
+            }
+            RawToken::Header(h) => {
+                tokenizer.regress(h.as_str().len() + 1);
+                break;
+            }
+            _ => panic!("ERROR_TODO: Unexpected thingy in field decl, {:?}", next),
+        };
+        let next = tokenizer.next().expect("ERROR_TODO");
+        match next.inner {
+            RawToken::Identifier(type_name, anot) => {
+                fields.push((field_name.to_owned(), Type::try_from(type_name).unwrap()))
+            }
+            _ => panic!(
+                "ERROR_TODO: Invalid syntax in field decleration, got {:?}",
+                next
+            ),
+        }
+    }
+    Ok((type_name, fields))
 }
 
 impl TryFrom<&str> for Type {
