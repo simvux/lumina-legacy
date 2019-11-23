@@ -19,7 +19,7 @@ mod r#type;
 pub use r#type::Type;
 pub mod body;
 mod irbuilder;
-pub use irbuilder::IrBuilder;
+pub use irbuilder::{generics, IrBuilder};
 pub mod flags;
 use body::BodySource;
 pub mod annotation;

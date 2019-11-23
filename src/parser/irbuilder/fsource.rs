@@ -1,12 +1,25 @@
 use super::IrBuilder;
 use crate::parser::{FunctionBuilder, Parser, Token, Type};
 use std::borrow::Cow;
+use std::fmt;
 use std::hash::Hash;
 
-#[derive(Debug, PartialEq, Hash, Eq, Clone)]
+#[derive(PartialEq, Hash, Eq, Clone)]
 pub enum FunctionSource {
     Coordinate(usize, usize),
     Owned(usize, FunctionBuilder),
+}
+impl fmt::Debug for FunctionSource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FunctionSource::Coordinate(fid, funcid) => {
+                write!(f, "FunctionSource({}:{})", fid, funcid)
+            }
+            FunctionSource::Owned(fid, funcb) => {
+                write!(f, "FunctionSource({}:{})", fid, &funcb.name)
+            }
+        }
+    }
 }
 
 impl From<(usize, usize)> for FunctionSource {

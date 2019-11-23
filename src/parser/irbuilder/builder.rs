@@ -11,6 +11,15 @@ impl IrBuilder {
                     .iter()
                     .map(|t| self.token_to_ir(source, &t.inner))
                     .collect::<Vec<ir::Entity>>();
+                if param_types.borrow().is_empty() && !params.is_empty() {
+                    let mut types = param_types.borrow_mut();
+                    for p in has.iter() {
+                        // TODO: This is quite a costly way to re-discover these types when we already know
+                        // it's valid. The edge case here is that param_types isn't filled for
+                        // bodies cloned due to generics.
+                        types.push(self.type_check(p, source).unwrap());
+                    }
+                };
                 match &takes.inner {
                     RawToken::Identifier(ident, anot) => {
                         let source = self

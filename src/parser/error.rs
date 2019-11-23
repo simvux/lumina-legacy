@@ -227,7 +227,6 @@ impl fmt::Display for ParseError {
                     ident, module.module_path
                 )
             }
-            // TODO: Detect operator since they're now functions and format accordingly
             FunctionVariantNotFound(ident, params, fid) => {
                 let module = &parser.modules[*fid];
                 let variants = &module.function_ids[ident];

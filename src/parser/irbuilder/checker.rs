@@ -54,10 +54,10 @@ impl IrBuilder {
                     }
                 };
                 if param_types.is_empty() {
+                    debug!("Filling in parameters for {:?}\n", entry);
                     for param in params.iter() {
                         param_types.push(self.type_check(param, source)?)
                     }
-                    debug!("Gathered new type-checked parameters {:?}\n", param_types);
                 } else {
                     debug!("Using existing type-checked parameters {:?}\n", param_types);
                 }

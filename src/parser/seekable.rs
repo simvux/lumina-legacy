@@ -1,4 +1,6 @@
+use super::generics::*;
 use super::{irbuilder::FunctionSource, ParseFault, Parser, Type, PRELUDE_FID};
+use std::collections::HashMap;
 
 pub trait Seekable {
     fn seek(&self, parser: &Parser) -> Result<FunctionSource, ParseFault>;
@@ -21,14 +23,21 @@ impl Seekable for (usize, &str, &[Type]) {
                 if self.0 == PRELUDE_FID {
                     return Err(ParseFault::Internal);
                 } else {
-                    return Seekable::seek(&(PRELUDE_FID, self.1, self.2), parser)
-                        .map_err(|_| ParseFault::FunctionNotFound(self.1.into(), self.0));
+                    return Seekable::seek(&(PRELUDE_FID, self.1, self.2), parser).map_err(
+                        |mut e| {
+                            // Overwrite prelude fid with this fid
+                            if let ParseFault::FunctionNotFound(_, fid) = &mut e {
+                                *fid = self.0
+                            }
+                            e
+                        },
+                    );
                 }
             }
         };
-        match variants.get(self.2) {
+        let found = match variants.get(self.2) {
             Some(funcid) => {
-                debug!("Found function {}:{} from {}", self.0, funcid, self.1);
+                debug!("Found function {}:{} from {}\n", self.0, funcid, self.1);
                 Ok(FunctionSource::from((self.0, *funcid)))
             }
             // Function variant not found
@@ -36,9 +45,27 @@ impl Seekable for (usize, &str, &[Type]) {
                 if self.0 == PRELUDE_FID {
                     Err(ParseFault::Internal)
                 } else {
-                    Seekable::seek(&(PRELUDE_FID, self.1, self.2), parser).map_err(|_| {
-                        ParseFault::FunctionVariantNotFound(self.1.into(), self.2.to_vec(), self.0)
-                    })
+                    Seekable::seek(&(PRELUDE_FID, self.1, self.2), parser)
+                }
+            }
+        };
+        match found {
+            Ok(source) => Ok(source),
+            Err(_) => {
+                // Lets try some generic matches
+                if let Some((funcid, generics)) = generic_search(variants, self.2) {
+                    let mut func = Seekable::seek(&(self.0, funcid), parser)
+                        .unwrap()
+                        .func(parser)
+                        .clone();
+                    generics.replace_all(&mut func);
+                    Ok(FunctionSource::Owned(self.0, func))
+                } else {
+                    Err(ParseFault::FunctionVariantNotFound(
+                        self.1.into(),
+                        self.2.to_vec(),
+                        self.0,
+                    ))
                 }
             }
         }
@@ -73,7 +100,11 @@ impl Seekable for (usize, usize) {
 }
 
 impl Parser {
-    pub fn find_func<S: Seekable>(&self, source: S) -> Result<FunctionSource, ParseFault> {
+    pub fn find_func<S: Seekable + std::fmt::Debug>(
+        &self,
+        source: S,
+    ) -> Result<FunctionSource, ParseFault> {
+        debug!("Trying to find {:?}\n", &source);
         source.seek(self)
     }
 }
