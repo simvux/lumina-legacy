@@ -56,8 +56,8 @@ fn verify_age age (int -> int)
 
 fn main
     io:puts
-        << swap_data #(\data: data + 1)
-        << \p: { p | age = if p.age < 0 then 0 else p.age }
+        << swap_data #(\data -> data + 1)
+        << \p -> { p | age = if p.age < 0 then 0 else p.age }
         << { person | name = prompt "What's your name?", age = age, data = 20 }
       where age = 
         verify_age << unwrap_or 18 << try_str (prompt "what's your age?")
