@@ -22,16 +22,8 @@ impl IrBuilder {
                     RawToken::Identifier(ident, anot) => {
                         // let func = &self.parser.modules[fid].functions[funcid];
                         let func = source.func(&self.parser);
-                        if ident.len() == 1 {
-                            if let Some(paramid) = func.get_parameter(&ident[0]) {
-                                let param = func.get_parameter_type(paramid);
-                                if let Type::Function(_) = param {
-                                    return Ok(param.clone());
-                                } else {
-                                    panic!("ET: the value {:?} cannot be passed as closure", param)
-                                }
-                            }
-                        }
+
+                        if let Some(paramid) = func.get_parameter_from_ident(ident) {}
                         unimplemented!();
                     }
                     _ => unimplemented!(),
@@ -87,7 +79,7 @@ impl IrBuilder {
             RawToken::Identifier(ident, anot) => {
                 if ident.len() == 1 {
                     let func = source.func(&self.parser);
-                    if let Some(paramid) = func.get_parameter(&ident[0]) {
+                    if let Some(paramid) = func.get_parameter_from_ident(ident) {
                         let r#type = func.get_parameter_type(paramid).clone();
                         debug!(
                             "{} was identified as parameter of type {}\n",
@@ -157,80 +149,16 @@ impl IrBuilder {
         Ok(r#type)
     }
 
-    pub fn find_matching_function(
-        &self,
-        self_fid: usize,
-        // fid: usize,
-        ident: &[String],
-        params: &[Type],
-    ) -> Result<(usize, usize, Generics), ParseFault> {
-        let (fid, funcname) = if ident.len() == 1 {
-            (self_fid, &ident[0])
-        } else {
-            assert_eq!(ident.len(), 2); // ET?
-            let fid = *self.parser.modules[self_fid]
-                .imports
-                .get(&ident[0])
-                .ok_or_else(|| ParseFault::ModuleNotImported(ident[0].to_owned()))?;
-            (fid, &ident[1])
-        };
-        let module = &self.parser.modules[fid];
-        let variants = match module.function_ids.get(funcname) {
-            None => {
-                return if fid == self_fid && fid != PRELUDE_FID {
-                    // Wasn't found, Try prelude
-                    match self.find_matching_function(PRELUDE_FID, &[funcname.to_owned()], params)
-                        // Switch out the PRELUDE fid's with this file's fids since it makes
-                        // more sense to assume local over prelude.
-                        // .map_err(|_| ParseFault::FunctionNotFound(funcname.to_string(), fid))
-                    {
-                        Ok(a) => Ok(a),
-                        Err(e) => match e {
-                            ParseFault::FunctionNotFound(name, _prelude) => Err(ParseFault::FunctionNotFound(name, fid)),
-                            ParseFault::FunctionVariantNotFound(name, params, prelude) => Err(ParseFault::FunctionVariantNotFound(name, params, prelude)),
-                            _ => unreachable!(),
-                        }
-                    }
-                } else {
-                    Err(ParseFault::FunctionNotFound(funcname.to_string(), self_fid))
-                };
-            }
-            Some(variants) => variants,
-        };
-
-        // Exact match?
-        if let Some(funcid) = variants.get(params).copied() {
-            return Ok((funcid, fid, Generics::empty()));
-        };
-
-        // Maybe there's a generic match?
-        if let Some((funcid, generics)) = generic_search(variants, params) {
-            return Ok((funcid, fid, generics));
-        };
-
-        Err(ParseFault::FunctionVariantNotFound(
-            funcname.to_string(),
-            params.to_vec(),
-            fid,
-        ))
-    }
-
     fn find_return_type(&self, fid: usize, params: &[Type], t: &RawToken) -> Type {
         let me = &self.parser.modules[fid];
         match t {
-            RawToken::Identifier(ident, anot) => {
-                if ident.len() == 1 {
-                    me.functions[me.function_ids[&ident[0]][params]]
-                        .returns
-                        .clone()
-                } else {
-                    let newfid = me.imports[&ident[0]];
-                    let newme = &self.parser.modules[newfid];
-                    newme.functions[newme.function_ids[&ident[1]][params]]
-                        .returns
-                        .clone()
-                }
-            }
+            RawToken::Identifier(ident, anot) => self
+                .parser
+                .find_func((fid, ident.as_slice(), params))
+                .unwrap()
+                .func(&self.parser)
+                .returns
+                .clone(),
             _ => unimplemented!(),
         }
     }

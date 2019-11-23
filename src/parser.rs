@@ -27,6 +27,7 @@ mod error;
 mod operator;
 pub use error::*;
 pub use leafmod::ParseModule;
+mod seekable;
 
 const PRELUDE_FID: usize = 0;
 

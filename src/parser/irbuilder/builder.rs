@@ -13,46 +13,14 @@ impl IrBuilder {
                     .collect::<Vec<ir::Entity>>();
                 match &takes.inner {
                     RawToken::Identifier(ident, anot) => {
-                        let ptypes: &[Type] = &param_types.borrow();
-                        let (newfid, (newfuncid, generics)) = {
-                            let fid = if ident.len() == 1 {
-                                source.fid()
-                            } else {
-                                self.parser.modules[source.fid()].imports[&ident[0]]
-                            };
-                            self.parser.modules[fid]
-                                .function_ids
-                                .get(ident.last().unwrap())
-                                .map(|a| (fid, super::generics::generic_search(a, ptypes).unwrap()))
-                                .unwrap_or_else(|| {
-                                    (
-                                        PRELUDE_FID,
-                                        super::generics::generic_search(
-                                            &self.parser.modules[PRELUDE_FID].function_ids
-                                                [ident.last().unwrap()],
-                                            ptypes,
-                                        )
-                                        .unwrap_or_else(
-                                            || {
-                                                panic!(
-                                                    "{:#?} <=====> {:#?}\n{:#?}",
-                                                    ident,
-                                                    &self.parser.modules[PRELUDE_FID].function_ids,
-                                                    ptypes,
-                                                )
-                                            },
-                                        ),
-                                    )
-                                })
-                        };
-
-                        let source = if generics.has_generics() {
-                            let mut new = self.parser.modules[newfid].functions[newfuncid].clone();
-                            generics.replace_all(&mut new);
-                            FunctionSource::Owned(newfid, new)
-                        } else {
-                            FunctionSource::from((newfid, newfuncid))
-                        };
+                        let source = self
+                            .parser
+                            .find_func((
+                                source.fid(),
+                                ident.as_slice(),
+                                param_types.borrow().as_slice(),
+                            ))
+                            .unwrap();
 
                         let entry = self.token_to_ir(&source, &source.body(&self.parser).inner);
                         let findex = self.gen_id(Cow::Owned(source));
@@ -66,29 +34,15 @@ impl IrBuilder {
             }
             // Either constant or parameter
             RawToken::Identifier(ident, anot) => {
+                if let Some(paramid) = source.func(&self.parser).get_parameter_from_ident(ident) {
+                    return ir::Entity::Parameter(paramid as u16);
+                }
                 const NO_PARAMS: &[Type] = &[];
-                let fid = if ident.len() == 1 {
-                    let func = source.func(&self.parser);
-                    for (i, param) in func.parameter_names.iter().enumerate() {
-                        if &ident[0] == param {
-                            return ir::Entity::Parameter(i as u16);
-                        }
-                    }
-                    source.fid()
-                } else {
-                    *self.parser.modules[source.fid()]
-                        .imports
-                        .get(&ident[0])
-                        .expect("Module not imported")
-                };
-                let newfuncid =
-                    self.parser.modules[fid].function_ids[ident.last().unwrap()][NO_PARAMS];
-                self.token_to_ir(
-                    &FunctionSource::from((source.fid(), newfuncid)),
-                    &self.parser.modules[source.fid()].functions[newfuncid]
-                        .body
-                        .inner,
-                )
+                let source = self
+                    .parser
+                    .find_func((source.fid(), ident.as_slice(), NO_PARAMS))
+                    .unwrap();
+                self.token_to_ir(&source, &source.func(&self.parser).body.inner)
             }
             RawToken::Inlined(inlined) => match &inlined {
                 Inlined::Int(n) => ir::Entity::Inlined(ir::Value::Int(*n)),

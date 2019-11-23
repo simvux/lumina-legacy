@@ -102,9 +102,7 @@ pub enum ParseFault {
     ListEntryTypeMismatch(Type, Type, usize),
     FnTypeReturnMismatch(Box<FunctionBuilder>, Type),
     FunctionNotFound(String, usize),
-    // OperatorNotFound(String, usize),
     FunctionVariantNotFound(String, Vec<Type>, usize),
-    // OperatorVariantNotFound(String, [Type; 2], usize),
     Internal,
 }
 

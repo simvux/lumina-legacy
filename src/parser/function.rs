@@ -372,6 +372,16 @@ impl FunctionBuilder {
         }
         None
     }
+    pub fn get_parameter_from_ident(&self, ident: &[String]) -> Option<usize> {
+        if ident.len() == 1 {
+            for (i, n) in self.parameter_names.iter().enumerate() {
+                if n == &ident[0] {
+                    return Some(i);
+                }
+            }
+        }
+        None
+    }
     pub fn get_parameter_type(&self, pid: usize) -> &Type {
         &self.parameter_types[pid]
     }
