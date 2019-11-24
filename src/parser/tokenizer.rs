@@ -1,7 +1,7 @@
 mod token;
 use std::convert::TryFrom;
 pub use token::{
-    is_valid_identifier, Header, Inlined, Key, Operator, RawToken, Token,
+    is_valid_identifier, Capture, Header, Inlined, Key, Operator, RawToken, Token,
     ALLOWED_IDENTIFIER_CHARACTERS,
 };
 
@@ -12,7 +12,7 @@ pub struct Tokenizer<'s> {
 }
 
 const BREAK_AT: &[u8] = b" ,()[]+*/\n#{}#";
-const IGNORES_SPACE: &[u8] = b",([+*/\n#{}#";
+const IGNORES_SPACE: &[u8] = b",([+*/\n#{}#\\";
 // &[(x, [y])] -> Only early-breaks on x if the next byte isn't any of y
 const MAYBE_IGNORES_SPACE: &[(u8, &[u8])] = &[
     (b'-', &[b'>']),
