@@ -15,6 +15,7 @@ pub enum Key {
     RecordClose,
     Match,
     Comma,
+    Lambda,
     If,
     Elif,
     Else,
@@ -33,6 +34,7 @@ impl TryFrom<&[u8]> for Key {
 
     fn try_from(bytes: &[u8]) -> Result<Key, Self::Error> {
         let res = match bytes {
+            b"\\" => Key::Lambda,
             b"(" => Key::ParenOpen,
             b")" => Key::ParenClose,
             b"->" => Key::Arrow,
@@ -65,6 +67,7 @@ impl TryFrom<&[u8]> for Key {
 impl Key {
     pub fn as_str(&self) -> &str {
         match self {
+            Key::Lambda => "\\",
             Key::ParenOpen => "(",
             Key::ParenClose => ")",
             Key::Arrow => "->",
