@@ -1,7 +1,7 @@
 pub use super::FunctionBuilder;
 use crate::ir::bridge;
 use crate::parser::tokenizer::{is_valid_identifier, Key, Operator, RawToken, Token};
-use crate::parser::{annotation, Capture, IdentSource, ParseError, ParseFault};
+use crate::parser::{annotation, IdentSource, ParseError, ParseFault};
 use std::cell::RefCell;
 use std::rc::Rc;
 
