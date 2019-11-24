@@ -1,8 +1,9 @@
 pub use super::FunctionBuilder;
 use crate::ir::bridge;
 use crate::parser::tokenizer::{is_valid_identifier, Key, Operator, RawToken, Token};
-use crate::parser::{annotation, IdentSource, ParseError, ParseFault};
+use crate::parser::{annotation, Capture, IdentSource, ParseError, ParseFault};
 use std::cell::RefCell;
+use std::rc::Rc;
 
 mod first;
 mod r#if;
@@ -290,6 +291,51 @@ pub trait BodySource {
                 };
 
                 self.handle_ident(mode, Token::new(t, token.source_index))
+            }
+            RawToken::Key(Key::Lambda) => {
+                let ident = {
+                    match self.next().map(|a| a.sep()) {
+                        None => panic!("ET: Ended while expecting identifier for lambda"),
+                        Some((RawToken::Identifier(ident, _anot), source)) => {
+                            if ident.len() != 1 {
+                                panic!("ET");
+                            } else {
+                                ident[0].to_owned()
+                            }
+                        }
+                        Some((_other, source)) => panic!("ET: Got but expected"),
+                    }
+                };
+
+                match self.next().map(|a| a.sep()) {
+                    None => panic!("ET: Ended while expecting identifier for lambda"),
+                    Some((RawToken::Key(Key::Arrow), _)) => (),
+                    Some((_other, source)) => panic!("ET: Got but expected"),
+                }
+
+                let inner = match self.walk(Mode::Neutral)? {
+                    WalkResult::EOF => panic!("ET: Unfinished lambda"),
+                    WalkResult::Value(v) => v,
+                    WalkResult::CloseParen(a) => {
+                        self.undo();
+                        a.unwrap()
+                    }
+                };
+
+                let v = Token::new(
+                    RawToken::Lambda(ident, Rc::default(), Box::new(inner)),
+                    token.source_index,
+                );
+                match mode {
+                    Mode::Neutral => self.handle_ident(Mode::Neutral, v),
+                    Mode::Operator(_, _) => {
+                        self.undo();
+                        Ok(WalkResult::Value(v))
+                    }
+                    Mode::Parameters(mut _previous) => {
+                        panic!("ET?: Lambda as parameter for function without enclosure");
+                    }
+                }
             }
             RawToken::Key(Key::ListOpen) => {
                 let list = list::build(self).map_err(|e| e.fallback(token.source_index))?;
