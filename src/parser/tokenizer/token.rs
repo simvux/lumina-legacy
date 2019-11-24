@@ -3,6 +3,7 @@ use crate::parser::Type;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::fmt;
+use std::rc::Rc;
 
 mod header;
 pub use header::Header;
@@ -78,6 +79,12 @@ impl TryFrom<&[u8]> for Token {
     }
 }
 
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct Capture {
+    param: String,
+    param_ids: Vec<usize>,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum RawToken {
     Identifier(Vec<String>, Option<Vec<Type>>),
@@ -87,6 +94,7 @@ pub enum RawToken {
     Inlined(Inlined),
     Parameters(Vec<Token>),
     Parameterized(Box<Token>, Vec<Token>, RefCell<Vec<Type>>),
+    Lambda(String, Box<Token>),
     ByPointer(Box<Token>),
 
     Operator(Operator),

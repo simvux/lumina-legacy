@@ -55,28 +55,19 @@ pub trait BodySource {
 
     fn walk(&mut self, mode: Mode) -> Result<WalkResult, ParseError> {
         let token = match self.next() {
-            Some(t) => {
-                /*
-                if t.inner == RawToken::NewLine {
-                    return self.walk(mode).map_err(|e| e.fallback(t.source_index));
-                } else {
-                    t
+            Some(t) => match t.inner {
+                RawToken::NewLine => {
+                    return self.walk(mode).map_err(|e| e.fallback(t.source_index))
                 }
-                */
-                match t.inner {
-                    RawToken::NewLine => {
-                        return self.walk(mode).map_err(|e| e.fallback(t.source_index))
-                    }
-                    RawToken::Identifier(ident, _) => {
-                        let source = t.source_index;
-                        Token::new(
-                            annotation::into_annotated(ident).map_err(|e| e.to_err(source))?,
-                            t.source_index,
-                        )
-                    }
-                    _ => t,
+                RawToken::Identifier(ident, _) => {
+                    let source = t.source_index;
+                    Token::new(
+                        annotation::into_annotated(ident).map_err(|e| e.to_err(source))?,
+                        t.source_index,
+                    )
                 }
-            }
+                _ => t,
+            },
             None => {
                 return match mode {
                     Mode::Parameters(v) => {
@@ -322,10 +313,7 @@ pub trait BodySource {
                     }
                 };
 
-                let v = Token::new(
-                    RawToken::Lambda(ident, Rc::default(), Box::new(inner)),
-                    token.source_index,
-                );
+                let v = Token::new(RawToken::Lambda(ident, Box::new(inner)), token.source_index);
                 match mode {
                     Mode::Neutral => self.handle_ident(Mode::Neutral, v),
                     Mode::Operator(_, _) => {
