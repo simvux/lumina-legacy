@@ -3,7 +3,6 @@ use crate::parser::Type;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::fmt;
-use std::rc::Rc;
 
 mod header;
 pub use header::Header;

@@ -50,7 +50,7 @@ impl FunctionBuilder {
                 Some(t) => t,
             };
             let source_index = next.source_index;
-            if let RawToken::Identifier(ident, anot) = next.inner {
+            if let RawToken::Identifier(ident, _anot) = next.inner {
                 Ok((
                     Type::try_from(ident).map_err(|e| e.to_err(source_index))?,
                     next.source_index,

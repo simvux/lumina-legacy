@@ -1,3 +1,4 @@
+use crate::ir::Value;
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -43,6 +44,17 @@ impl fmt::Display for Inlined {
             Inlined::Float(n) => write!(f, "{}", n),
             Inlined::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
             Inlined::Nothing => f.write_str("_"),
+        }
+    }
+}
+
+impl From<Inlined> for Value {
+    fn from(inlined: Inlined) -> Value {
+        match inlined {
+            Inlined::Int(n) => Value::Int(n),
+            Inlined::Float(n) => Value::Float(n),
+            Inlined::Nothing => Value::Nothing,
+            Inlined::Bool(b) => Value::Bool(b),
         }
     }
 }

@@ -3,7 +3,6 @@ use crate::ir::bridge;
 use crate::parser::tokenizer::{is_valid_identifier, Key, Operator, RawToken, Token};
 use crate::parser::{annotation, IdentSource, ParseError, ParseFault};
 use std::cell::RefCell;
-use std::rc::Rc;
 
 mod first;
 mod r#if;
@@ -287,21 +286,21 @@ pub trait BodySource {
                 let ident = {
                     match self.next().map(|a| a.sep()) {
                         None => panic!("ET: Ended while expecting identifier for lambda"),
-                        Some((RawToken::Identifier(ident, _anot), source)) => {
+                        Some((RawToken::Identifier(ident, _anot), _source_index)) => {
                             if ident.len() != 1 {
                                 panic!("ET");
                             } else {
                                 ident[0].to_owned()
                             }
                         }
-                        Some((_other, source)) => panic!("ET: Got but expected"),
+                        Some((_other, _source_index)) => panic!("ET: Got but expected"),
                     }
                 };
 
                 match self.next().map(|a| a.sep()) {
                     None => panic!("ET: Ended while expecting identifier for lambda"),
                     Some((RawToken::Key(Key::Arrow), _)) => (),
-                    Some((_other, source)) => panic!("ET: Got but expected"),
+                    Some((_other, _source_index)) => panic!("ET: Got but expected"),
                 }
 
                 let inner = match self.walk(Mode::Neutral)? {

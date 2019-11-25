@@ -130,7 +130,7 @@ impl FunctionBuilder {
                 }
             };
             match next.inner {
-                RawToken::Identifier(name, anot) => self.parameter_names.push(name[0].clone()),
+                RawToken::Identifier(name, _anot) => self.parameter_names.push(name[0].clone()),
                 RawToken::Key(Key::ParenOpen) => return Ok(self),
                 _ => {
                     return ParseFault::GotButExpected(
@@ -174,7 +174,7 @@ impl FunctionBuilder {
                 }
             };
             match next_inner {
-                RawToken::Identifier(name, anot) => self
+                RawToken::Identifier(name, _anot) => self
                     .parameter_types
                     .push(Type::try_from(name).map_err(|e| e.to_err(next_source_index))?),
                 RawToken::Key(Key::ListOpen) => self
@@ -205,7 +205,7 @@ impl FunctionBuilder {
         };
         let r#type = match next {
             RawToken::Key(Key::ListOpen) => Type::List(Box::new(self.parse_list_type(tokenizer)?)),
-            RawToken::Identifier(name, anot) => {
+            RawToken::Identifier(name, _anot) => {
                 Type::try_from(name).map_err(|e| e.to_err(source_index))?
             }
             _ => {
@@ -245,7 +245,7 @@ impl FunctionBuilder {
                 }
             };
             match next_inner {
-                RawToken::Identifier(name, anot) => {
+                RawToken::Identifier(name, _anot) => {
                     buf.push(Type::try_from(name).map_err(|e| e.to_err(next_source_index))?)
                 }
                 RawToken::Key(Key::ListOpen) => {
@@ -280,7 +280,7 @@ impl FunctionBuilder {
             }
         };
         let r#type = match next_inner {
-            RawToken::Identifier(name, anot) => {
+            RawToken::Identifier(name, _anot) => {
                 Type::try_from(name).map_err(|e| e.to_err(next_source_index))?
             }
             RawToken::Key(Key::ParenOpen) => {

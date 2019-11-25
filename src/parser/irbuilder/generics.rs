@@ -1,48 +1,11 @@
-use crate::parser::{
-    FunctionBuilder, Inlined, ParseError, ParseFault, RawToken, Token, Type, PRELUDE_FID,
-};
+use crate::parser::{FunctionBuilder, Type};
 use std::collections::HashMap;
-
-// TODO TODO TODO
-// Ok I just relized how stupid the way I'm doing this is.
-// I should just be making lookups of all the possible generic variants.
-// Instead of iterating through literally everything.
-//
-// or actually. Maybe it's not to bad to iterate like this? I'm only iterating through all with
-// matching identifier.
-//
-// Nah I think direct lookups will be easier
 
 #[derive(Debug)]
 pub struct Generics {
     inner: Vec<Type>,
 }
 impl Generics {
-    pub fn decoded(&self, t: &Type) -> Result<Type, ParseFault> {
-        match t {
-            Type::Generic(n) => match self.inner.get(*n as usize) {
-                Some(t) => Ok(t.clone()),
-                None => Err(ParseFault::CannotInferType((n + 97) as char)),
-            },
-            Type::List(box inner) => Ok(Type::List(Box::new(self.decoded(inner)?))),
-            _ => Ok(t.clone()),
-        }
-    }
-    pub fn new() -> Self {
-        Self::with_capacity(0)
-    }
-    pub fn with_capacity(cap: usize) -> Self {
-        Generics {
-            inner: Vec::with_capacity(cap),
-        }
-    }
-    pub fn empty() -> Self {
-        Self::new()
-    }
-    pub fn has_generics(&self) -> bool {
-        !self.inner.is_empty()
-    }
-
     pub fn replace_all(&self, func: &mut FunctionBuilder) {
         for param in func.parameter_types.iter_mut() {
             if let Type::Generic(genid) = param {

@@ -60,14 +60,15 @@ impl IrBuilder {
         let mut indexes = self.assigned_indexes.borrow_mut();
         match indexes.get(&func) {
             None => {
+                debug!("Generating new findex for {:?}", *func);
                 let new_index = indexes.len();
                 indexes.insert(func.into_owned(), new_index);
                 new_index
             }
-            Some(existing) => *existing,
+            Some(existing) => {
+                debug!("Using existing findex for {:?}", *func);
+                *existing
+            }
         }
-    }
-    pub fn try_get_id(&self, func: &FunctionSource) -> Option<usize> {
-        self.assigned_indexes.borrow().get(func).copied()
     }
 }

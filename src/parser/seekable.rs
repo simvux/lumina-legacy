@@ -1,6 +1,5 @@
 use super::generics::*;
 use super::{irbuilder::FunctionSource, ParseFault, Parser, Type, PRELUDE_FID};
-use std::collections::HashMap;
 
 pub trait Seekable {
     fn seek(&self, parser: &Parser) -> Result<FunctionSource, ParseFault>;
@@ -37,7 +36,7 @@ impl Seekable for (usize, &str, &[Type]) {
         };
         let found = match variants.get(self.2) {
             Some(funcid) => {
-                debug!("Found function {}:{} from {}\n", self.0, funcid, self.1);
+                debug!("Found function {}:{} from {}", self.0, funcid, self.1);
                 Ok(FunctionSource::from((self.0, *funcid)))
             }
             // Function variant not found
@@ -104,7 +103,7 @@ impl Parser {
         &self,
         source: S,
     ) -> Result<FunctionSource, ParseFault> {
-        debug!("Trying to find {:?}\n", &source);
+        debug!("Trying to find {:?}", &source);
         source.seek(self)
     }
 }

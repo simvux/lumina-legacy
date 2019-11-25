@@ -11,9 +11,9 @@ pub fn entrypoint() -> FileSource {
 macro_rules! debug {
     ($($arg:tt)*) => (
         #[cfg(debug_assertions)]
-        print!(" DBG -> ");
+        print!(" leaf -> ");
         #[cfg(debug_assertions)]
-        std::io::_print(std::format_args!($($arg)*));
+        println!($($arg)*);
     )
 }
 
@@ -55,7 +55,7 @@ fn main() {
             return;
         }
     };
-    debug!("{:#?}\n", parser);
+    debug!("{:#?}", parser);
 
     // Verify syntax, infer types and compile to low-level IR.
     let (ir, entrypoint) =
@@ -66,12 +66,12 @@ fn main() {
             }
             Ok(ir) => ir,
         };
-    debug!("Initializing runtime");
+    debug!("Initializing runtime with entry {:?}", entrypoint);
     drop(file_path);
     drop(source_code);
 
     let runtime = interpreter::Runtime::new(ir);
     let entry = &runtime.instructions[entrypoint];
     let final_value = interpreter::Runner::start(&runtime, &entry, Vec::new().into());
-    debug!("{:#?}\n", final_value);
+    debug!("{:#?}", final_value);
 }

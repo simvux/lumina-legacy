@@ -6,12 +6,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-mod builder;
 mod checker;
 mod fsource;
 pub mod generics;
 pub use fsource::FunctionSource;
-use generics::Generics;
 
 //#[derive(Debug)]
 pub struct IrBuilder {
@@ -31,14 +29,6 @@ impl IrBuilder {
         }
     }
 
-    fn should_replace(&self, findex: usize) -> bool {
-        use std::mem::discriminant;
-        match self.completed.borrow().get(findex) {
-            Some(a) => discriminant(a) == discriminant(&ir::Entity::Unique),
-            None => true,
-        }
-    }
-
     pub fn start_type_checker(
         self,
         fid: usize,
@@ -54,10 +44,11 @@ impl IrBuilder {
         };
 
         let func = source.func(&self.parser);
-        let actual_return_value = match self.type_check(&func.body, &source, HashMap::default()) {
-            Ok(t) => t,
-            Err(e) => return e.with_parser(self.parser).into(),
-        };
+        let (actual_return_value, entry) =
+            match self.type_check(&func.body, &source, HashMap::default()) {
+                Ok(t) => t,
+                Err(e) => return e.with_parser(self.parser).into(),
+            };
         if actual_return_value != func.returns && func.returns != Type::Nothing {
             return ParseFault::FnTypeReturnMismatch(Box::new(func.clone()), actual_return_value)
                 .to_err(func.body.source_index)
@@ -66,7 +57,6 @@ impl IrBuilder {
                 .into();
         }
         let findex = self.gen_id(Cow::Borrowed(&source));
-        let entry = self.token_to_ir(&source, &func.body.inner);
         self.complete(findex, entry);
 
         Ok((
@@ -75,37 +65,15 @@ impl IrBuilder {
         ))
     }
 
-    fn type_check_function(&self, source: FunctionSource) -> Result<Type, ParseError> {
-        debug!("Starting type check of {:?}\n", source);
-        let actual_return_value =
-            self.type_check(&source.body(&self.parser), &source, HashMap::default())?;
-        if actual_return_value != *source.returns(&self.parser) {
-            return ParseFault::FnTypeReturnMismatch(
-                Box::new(source.func(&self.parser).clone()), // TODO: Clone can be avoided fairly easily
-                actual_return_value,
-            )
-            .to_err(source.func(&self.parser).body.source_index)
-            .into();
+    pub fn complete(&self, findex: usize, entity: ir::Entity) {
+        debug!(" || {} -> {:?}", findex, entity);
+        let mut stack = self.completed.borrow_mut();
+        if findex > stack.len() {
+            stack.resize(findex, ir::Entity::Unique)
         }
-        debug!("Fetching findex of {:?}\n", source);
-        match self.try_get_id(&source) {
-            None => {
-                debug!("Making new findex for {:?}\n", source);
-                let findex = self.gen_id(Cow::Borrowed(&source));
-                let entry = self.token_to_ir(&source, &source.func(&self.parser).body.inner);
-                self.complete(findex, entry);
-            }
-            Some(findex) => {
-                if self.should_replace(findex) {
-                    debug!("Converting {}#{:?} to llir\n", findex, source);
-                    let entry = self.token_to_ir(&source, &source.func(&self.parser).body.inner);
-                    self.complete(findex, entry);
-                } else {
-                    debug!("Function {:?} is already on the stack\n", source);
-                }
-            }
+        match stack.get_mut(findex) {
+            Some(a) => *a = entity,
+            None => stack.insert(findex, entity),
         }
-
-        Ok(actual_return_value)
     }
 }
