@@ -10,6 +10,7 @@ pub enum Identifiable {
     Param(usize),
     Function(FunctionSource),
     Lambda(usize),
+    Where(usize),
 }
 use Identifiable::*;
 
@@ -25,6 +26,9 @@ impl IrBuilder {
             let func = source.func(&self.parser);
             if let Some(paramid) = func.get_parameter_from_ident(ident) {
                 return Ok(Identifiable::Param(paramid));
+            };
+            if let Some(whereid) = func.get_where_from_ident(ident) {
+                return Ok(Identifiable::Where(whereid));
             };
 
             if let Some(bufid) = identpool.get::<str>(&ident[0]) {
@@ -106,6 +110,7 @@ impl IrBuilder {
                                 // TODO: `f x` where f: param<(a -> b)>
                                 unimplemented!();
                             }
+                            Where(_) => unimplemented!(),
                             Lambda(_) => unimplemented!(),
                             Function(newsource) => {
                                 // We don't want to type check forever in recursion
@@ -145,6 +150,14 @@ impl IrBuilder {
                     source.func(&self.parser).get_parameter_type(id).clone(),
                     ir::Entity::Parameter(id as u16),
                 )),
+                Where(id) => {
+                    let (t, v) = self.type_check(
+                        &source.func(&self.parser).wheres[id].1,
+                        &source,
+                        HashMap::new(),
+                    )?;
+                    Ok((t, v))
+                }
                 Function(source) => {
                     const NO_ARGS: &[Type] = &[];
                     let newsource = self

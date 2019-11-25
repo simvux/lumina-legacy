@@ -364,6 +364,20 @@ impl FunctionBuilder {
             }
         }
     }
+    pub fn get_where(&self, ident: &str) -> Option<usize> {
+        for (i, (s, _)) in self.wheres.iter().enumerate() {
+            if ident == s {
+                return Some(i);
+            }
+        }
+        None
+    }
+    pub fn get_where_from_ident(&self, ident: &[String]) -> Option<usize> {
+        if ident.len() == 1 {
+            return self.get_where(&ident[0]);
+        }
+        None
+    }
     pub fn get_parameter(&self, ident: &str) -> Option<usize> {
         for (i, n) in self.parameter_names.iter().enumerate() {
             if n == ident {
@@ -374,11 +388,7 @@ impl FunctionBuilder {
     }
     pub fn get_parameter_from_ident(&self, ident: &[String]) -> Option<usize> {
         if ident.len() == 1 {
-            for (i, n) in self.parameter_names.iter().enumerate() {
-                if n == &ident[0] {
-                    return Some(i);
-                }
-            }
+            return self.get_parameter(&ident[0]);
         }
         None
     }
