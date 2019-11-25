@@ -10,6 +10,7 @@ mod checker;
 mod fsource;
 pub mod generics;
 pub use fsource::FunctionSource;
+pub mod lambda;
 
 //#[derive(Debug)]
 pub struct IrBuilder {

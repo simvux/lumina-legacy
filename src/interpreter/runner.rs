@@ -9,6 +9,7 @@ pub struct Runner<'a> {
     runtime: &'a Runtime,
     entity: &'a Entity,
     params: ParamBuffer<'a>,
+    lambda_buffer: Vec<Value>,
 }
 
 impl<'a> Runner<'a> {
@@ -17,6 +18,7 @@ impl<'a> Runner<'a> {
             runtime,
             entity: entrypoint,
             params,
+            lambda_buffer: Vec::new(),
         }
         .run()
     }
@@ -26,12 +28,14 @@ impl<'a> Runner<'a> {
             runtime: self.runtime,
             entity,
             params,
+            lambda_buffer: self.lambda_buffer.clone(),
         }
         .run()
     }
 
     fn run(mut self) -> Value {
         loop {
+            dbg!(&self.entity);
             match self.entity {
                 Entity::RustCall(index, params) => return self.rust_call(*index, params),
                 Entity::Parameter(n) => return self.params.param_consume(*n as usize),
@@ -39,6 +43,31 @@ impl<'a> Runner<'a> {
                 Entity::IfExpression(expr) => return self.if_expression(expr),
                 Entity::FirstStatement(stmt) => return self.first_statement(stmt),
                 Entity::List(list) => return self.list(list),
+                Entity::LambdaParam(n) => {
+                    dbg!(&self.entity, &self.lambda_buffer);
+                    return self.lambda_buffer[*n as usize].clone();
+                }
+                Entity::Lambda(entries) => {
+                    let mut evaluated_params = match entries.len() - 1 {
+                        0 => Vec::new(),
+                        1 => {
+                            let new_params = self.params.consume();
+                            vec![self.spawn(&entries[1], new_params)]
+                        }
+                        _ => {
+                            let mut buf = Vec::with_capacity(entries.len());
+                            for p in entries[1..entries.len() - 1].iter() {
+                                buf.push(self.spawn(p, self.params.borrow()))
+                            }
+                            let new_params = self.params.consume();
+                            buf.push(self.spawn(&entries[entries.len() - 1], new_params));
+                            buf
+                        }
+                    };
+                    self.lambda_buffer.append(&mut evaluated_params);
+                    self.entity = &entries[0];
+                    dbg!(&self.entity, &self.lambda_buffer);
+                }
                 Entity::FunctionCall(findex, params) => {
                     let evaluated_params = match params.len() {
                         0 => Vec::new(),

@@ -1,5 +1,3 @@
-use crate::parser::body::IfExpr;
-
 #[derive(Debug, Clone)]
 pub struct If<T> {
     inner: Vec<T>,

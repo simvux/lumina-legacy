@@ -5,22 +5,16 @@ use crate::parser::{Inlined, ParseError, ParseFault, RawToken, Token, Type};
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-#[derive(Clone)]
-pub enum Identifiable {
-    Param(usize),
-    Function(FunctionSource),
-    Lambda(usize),
-    Where(usize),
-}
+use super::lambda::Identifiable;
 use Identifiable::*;
 
-impl IrBuilder {
+impl<'a> IrBuilder {
     fn discover_ident(
-        &self,
+        &'a self,
         source: &FunctionSource,
         ident: &[String],
-        params: &[Type],
-        identpool: &HashMap<&str, usize>,
+        params: &'a [Type],
+        identpool: &HashMap<&str, (usize, &'a [Type])>,
     ) -> Result<Identifiable, ParseFault> {
         if ident.len() == 1 {
             let func = source.func(&self.parser);
@@ -31,8 +25,8 @@ impl IrBuilder {
                 return Ok(Identifiable::Where(whereid));
             };
 
-            if let Some(bufid) = identpool.get::<str>(&ident[0]) {
-                return Ok(Identifiable::Lambda(*bufid));
+            if let Some(lamb) = identpool.get::<str>(&ident[0]) {
+                return Ok(Identifiable::Lambda(lamb.0, lamb.1));
             };
         }
         Ok(Identifiable::Function(self.parser.find_func((
@@ -43,10 +37,10 @@ impl IrBuilder {
     }
 
     pub fn type_check(
-        &self,
-        token: &Token,
+        &'a self,
+        token: &'a Token,
         source: &FunctionSource,
-        identpool: HashMap<&str, usize>,
+        identpool: HashMap<&'a str, (usize, &'a [Type])>,
     ) -> Result<(Type, ir::Entity), ParseError> {
         macro_rules! discover_ident {
             ($ident:expr, $params:expr) => {{
@@ -111,7 +105,7 @@ impl IrBuilder {
                                 unimplemented!();
                             }
                             Where(_) => unimplemented!(),
-                            Lambda(_) => unimplemented!(),
+                            Lambda(lid, parameter_type) => unimplemented!(),
                             Function(newsource) => {
                                 // We don't want to type check forever in recursion
                                 if newsource == *source {
@@ -141,11 +135,22 @@ impl IrBuilder {
                             ir::Entity::RustCall(*bridged_id, param_entities),
                         ))
                     }
+                    RawToken::Lambda(ident, box inner) => {
+                        let mut new_pool = identpool.clone();
+                        let ptypes = p_types.borrow().clone();
+                        new_pool.insert(&ident, (identpool.len(), ptypes.as_slice()));
+                        let (t, v) = self.type_check(inner, source, new_pool)?;
+                        param_entities.insert(0, v);
+                        Ok((t, ir::Entity::Lambda(param_entities)))
+                    }
                     _ => panic!("{:#?} cannot take parameters", entry.inner),
                 }
             }
             RawToken::Identifier(ident, _) => match discover_ident!(ident, &[]) {
-                Lambda(_) => unimplemented!(),
+                Lambda(id, parameter_types) => Ok((
+                    parameter_types[0].clone(),
+                    ir::Entity::LambdaParam(id as u16),
+                )),
                 Param(id) => Ok((
                     source.func(&self.parser).get_parameter_type(id).clone(),
                     ir::Entity::Parameter(id as u16),

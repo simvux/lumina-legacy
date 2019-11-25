@@ -13,9 +13,11 @@ pub enum Entity {
     IfExpression(self::If<Entity>),
     FirstStatement(self::First<Entity>),
     Parameter(u16),
+    LambdaParam(u16),
 
     Inlined(Value),
     List(Vec<Entity>),
+    Lambda(Vec<Entity>),
 
     Unimplemented,
     Unique,
