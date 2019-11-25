@@ -7,7 +7,7 @@ use std::hash::Hash;
 #[derive(PartialEq, Hash, Eq, Clone)]
 pub enum FunctionSource {
     Coordinate(usize, usize),
-    Owned(usize, FunctionBuilder),
+    Owned(usize, Box<FunctionBuilder>),
 }
 impl fmt::Debug for FunctionSource {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -30,7 +30,7 @@ impl From<(usize, usize)> for FunctionSource {
 
 impl From<(usize, FunctionBuilder)> for FunctionSource {
     fn from((fid, func): (usize, FunctionBuilder)) -> Self {
-        Self::Owned(fid, func)
+        Self::Owned(fid, Box::new(func))
     }
 }
 

@@ -59,7 +59,7 @@ impl Seekable for (usize, &str, &[Type]) {
                         .func(parser)
                         .clone();
                     generics.replace_all(&mut func);
-                    Ok(FunctionSource::Owned(self.0, func))
+                    Ok(FunctionSource::from((self.0, func)))
                 } else {
                     Err(ParseFault::FunctionVariantNotFound(
                         self.1.into(),

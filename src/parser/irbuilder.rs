@@ -54,7 +54,7 @@ impl IrBuilder {
         };
 
         let func = source.func(&self.parser);
-        let actual_return_value = match self.type_check(&func.body, &source) {
+        let actual_return_value = match self.type_check(&func.body, &source, HashMap::default()) {
             Ok(t) => t,
             Err(e) => return e.with_parser(self.parser).into(),
         };
@@ -90,7 +90,8 @@ impl IrBuilder {
 
     fn type_check_function(&self, source: FunctionSource) -> Result<Type, ParseError> {
         debug!("Starting type check of {:?}\n", source);
-        let actual_return_value = self.type_check(&source.body(&self.parser), &source)?;
+        let actual_return_value =
+            self.type_check(&source.body(&self.parser), &source, HashMap::default())?;
         if actual_return_value != *source.returns(&self.parser) {
             return ParseFault::FnTypeReturnMismatch(
                 Box::new(source.func(&self.parser).clone()), // TODO: Clone can be avoided fairly easily

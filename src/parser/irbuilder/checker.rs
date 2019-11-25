@@ -1,11 +1,54 @@
 use super::fsource::FunctionSource;
 use super::generics::*;
 use super::IrBuilder;
-use crate::parser::{Inlined, ParseError, ParseFault, RawToken, Token, Type, PRELUDE_FID};
+use crate::parser::{Inlined, ParseError, ParseFault, RawToken, Token, Type};
+use std::collections::HashMap;
+
+#[derive(Clone)]
+pub enum Identifiable {
+    Param(usize),
+    Function(FunctionSource),
+    Lambda(usize),
+}
+use Identifiable::*;
 
 impl IrBuilder {
-    // pub fn type_check(&self, token: &Token, fid: usize, funcid: usize) -> Result<Type, ParseError> {
-    pub fn type_check(&self, token: &Token, source: &FunctionSource) -> Result<Type, ParseError> {
+    fn discover_ident(
+        &self,
+        source: &FunctionSource,
+        ident: &[String],
+        params: &[Type],
+        identpool: HashMap<&str, usize>,
+    ) -> Result<Identifiable, ParseFault> {
+        if ident.len() == 1 {
+            let func = source.func(&self.parser);
+            if let Some(paramid) = func.get_parameter_from_ident(ident) {
+                return Ok(Identifiable::Param(paramid));
+            };
+
+            if let Some(bufid) = identpool.get::<str>(&ident[0]) {
+                return Ok(Identifiable::Lambda(*bufid));
+            };
+        }
+        Ok(Identifiable::Function(self.parser.find_func((
+            source.fid(),
+            ident,
+            params,
+        ))?))
+    }
+
+    pub fn type_check(
+        &self,
+        token: &Token,
+        source: &FunctionSource,
+        identpool: HashMap<&str, usize>,
+    ) -> Result<Type, ParseError> {
+        macro_rules! discover_ident {
+            ($ident:expr, $params:expr) => {{
+                self.discover_ident(source, $ident, $params, identpool)
+                    .map_err(|e| e.to_err(token.source_index))?
+            }};
+        };
         let r#type = match &token.inner {
             RawToken::Inlined(inlined) => {
                 debug!("Handing type of inlined value {}\n", inlined);
@@ -19,11 +62,11 @@ impl IrBuilder {
             RawToken::Unimplemented => source.returns(&self.parser).clone(),
             RawToken::ByPointer(box t) => {
                 match &t.inner {
-                    RawToken::Identifier(ident, anot) => {
+                    RawToken::Identifier(ident, _) => {
                         // let func = &self.parser.modules[fid].functions[funcid];
                         let func = source.func(&self.parser);
 
-                        if let Some(paramid) = func.get_parameter_from_ident(ident) {}
+                        // if let Some(paramid) = func.get_parameter_from_ident(ident) {}
                         unimplemented!();
                     }
                     _ => unimplemented!(),
@@ -35,9 +78,9 @@ impl IrBuilder {
             }
             RawToken::FirstStatement(entries) => {
                 for entry in entries[0..entries.len() - 1].iter() {
-                    self.type_check(entry, source)?;
+                    self.type_check(entry, source, identpool.clone())?;
                 }
-                self.type_check(entries.last().unwrap(), source)?
+                self.type_check(entries.last().unwrap(), source, identpool)?
             }
             RawToken::Parameterized(box entry, params, p_types) => {
                 let mut param_types = match p_types.try_borrow_mut() {
@@ -56,18 +99,23 @@ impl IrBuilder {
                 if param_types.is_empty() {
                     debug!("Filling in parameters for {:?}\n", entry);
                     for param in params.iter() {
-                        param_types.push(self.type_check(param, source)?)
+                        param_types.push(self.type_check(param, source, identpool.clone())?)
                     }
                 } else {
                     debug!("Using existing type-checked parameters {:?}\n", param_types);
                 }
                 drop(param_types);
                 match &entry.inner {
-                    RawToken::Identifier(ident, anot) => {
+                    RawToken::Identifier(ident, _) => {
                         let param_types = p_types.borrow();
-                        debug!("Calling {} with {:?}\n", ident.join(":"), param_types);
-                        self.type_check_function_source(source.fid(), ident, &param_types)
-                            .map_err(|e| e.fallback(token.source_index))?
+                        match discover_ident!(ident, &param_types) {
+                            Param(_) => {
+                                // TODO: `f x` where f: (a -> b)
+                                unimplemented!();
+                            }
+                            Lambda(_) => unimplemented!(),
+                            Function(source) => self.type_check_function(source)?,
+                        }
                     }
                     RawToken::RustCall(bridged_id, r#type) => {
                         debug!("Handing type of rustcall {}\n", bridged_id);
@@ -76,35 +124,22 @@ impl IrBuilder {
                     _ => panic!("{:#?} cannot take parameters", entry.inner),
                 }
             }
-            RawToken::Identifier(ident, anot) => {
-                if ident.len() == 1 {
-                    let func = source.func(&self.parser);
-                    if let Some(paramid) = func.get_parameter_from_ident(ident) {
-                        let r#type = func.get_parameter_type(paramid).clone();
-                        debug!(
-                            "{} was identified as parameter of type {}\n",
-                            ident.join(":"),
-                            r#type
-                        );
-                        return Ok(r#type);
-                    };
-                }
-
-                // This is only for leaf constants. Since other functions will be RawToken::Parameterized
-                debug!("Checking if {} is a constant\n", ident.join(":"));
-                self.type_check_function_source(source.fid(), ident, &[])?
-            }
+            RawToken::Identifier(ident, _) => match discover_ident!(ident, &[]) {
+                Lambda(_) => unimplemented!(),
+                Param(id) => source.func(&self.parser).get_parameter_type(id).clone(),
+                Function(source) => self.type_check_function(source)?,
+            },
             RawToken::IfExpression(expr) => {
                 let mut expect_type = None;
                 for (cond, eval) in expr.branches.iter() {
-                    let cv = self.type_check(cond, source)?;
+                    let cv = self.type_check(cond, source, identpool.clone())?;
                     if cv != Type::Bool {
                         panic!(
                             "ET: Condition must result in true or false, but I got {:?}",
                             cv
                         );
                     }
-                    let ev = self.type_check(eval, source)?;
+                    let ev = self.type_check(eval, source, identpool.clone())?;
                     if let Some(expected) = &expect_type {
                         if ev != *expected {
                             panic!(
@@ -116,7 +151,7 @@ impl IrBuilder {
                         expect_type = Some(ev);
                     }
                 }
-                let ev = self.type_check(&expr.else_branch, source)?;
+                let ev = self.type_check(&expr.else_branch, source, identpool)?;
                 if let Some(expected) = &expect_type {
                     if ev != *expected {
                         panic!(
@@ -130,7 +165,7 @@ impl IrBuilder {
             RawToken::List(entries) => {
                 let mut of_t: Option<Type> = None;
                 for (i, entry) in entries.iter().enumerate() {
-                    let r#type = self.type_check(entry, source)?;
+                    let r#type = self.type_check(entry, source, identpool.clone())?;
                     match &of_t {
                         Some(t) => {
                             if *t != r#type {
@@ -150,9 +185,8 @@ impl IrBuilder {
     }
 
     fn find_return_type(&self, fid: usize, params: &[Type], t: &RawToken) -> Type {
-        let me = &self.parser.modules[fid];
         match t {
-            RawToken::Identifier(ident, anot) => self
+            RawToken::Identifier(ident, _) => self
                 .parser
                 .find_func((fid, ident.as_slice(), params))
                 .unwrap()

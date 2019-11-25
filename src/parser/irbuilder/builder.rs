@@ -1,7 +1,9 @@
+use super::checker::Identifiable;
 use super::{FunctionSource, IrBuilder};
 use crate::ir;
 use crate::parser::{Inlined, RawToken, Type, PRELUDE_FID};
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 impl IrBuilder {
     pub fn token_to_ir(&self, source: &FunctionSource, t: &RawToken) -> ir::Entity {
@@ -17,7 +19,7 @@ impl IrBuilder {
                         // TODO: This is quite a costly way to re-discover these types when we already know
                         // it's valid. The edge case here is that param_types isn't filled for
                         // bodies cloned due to generics.
-                        types.push(self.type_check(p, source).unwrap());
+                        types.push(self.type_check(p, source, HashMap::default()).unwrap());
                     }
                 };
                 match &takes.inner {
