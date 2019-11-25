@@ -75,19 +75,6 @@ impl IrBuilder {
         ))
     }
 
-    fn type_check_function_source(
-        &self,
-        self_fid: usize,
-        ident: &[String],
-        params: &[Type],
-    ) -> Result<Type, ParseError> {
-        let source = self
-            .parser
-            .find_func((self_fid, ident, params))
-            .map_err(|e| e.to_err(0))?;
-        self.type_check_function(source)
-    }
-
     fn type_check_function(&self, source: FunctionSource) -> Result<Type, ParseError> {
         debug!("Starting type check of {:?}\n", source);
         let actual_return_value =

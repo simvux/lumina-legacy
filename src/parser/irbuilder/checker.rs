@@ -18,7 +18,7 @@ impl IrBuilder {
         source: &FunctionSource,
         ident: &[String],
         params: &[Type],
-        identpool: HashMap<&str, usize>,
+        identpool: &HashMap<&str, usize>,
     ) -> Result<Identifiable, ParseFault> {
         if ident.len() == 1 {
             let func = source.func(&self.parser);
@@ -45,7 +45,7 @@ impl IrBuilder {
     ) -> Result<Type, ParseError> {
         macro_rules! discover_ident {
             ($ident:expr, $params:expr) => {{
-                self.discover_ident(source, $ident, $params, identpool)
+                self.discover_ident(source, $ident, $params, &identpool)
                     .map_err(|e| e.to_err(token.source_index))?
             }};
         };
