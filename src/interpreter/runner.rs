@@ -35,7 +35,6 @@ impl<'a> Runner<'a> {
 
     fn run(mut self) -> Value {
         loop {
-            dbg!(&self.entity);
             match self.entity {
                 Entity::RustCall(index, params) => return self.rust_call(*index, params),
                 Entity::Parameter(n) => return self.params.param_consume(*n as usize),
@@ -44,7 +43,6 @@ impl<'a> Runner<'a> {
                 Entity::FirstStatement(stmt) => return self.first_statement(stmt),
                 Entity::List(list) => return self.list(list),
                 Entity::LambdaParam(n) => {
-                    dbg!(&self.entity, &self.lambda_buffer);
                     return self.lambda_buffer[*n as usize].clone();
                 }
                 Entity::Lambda(entries) => {
@@ -66,7 +64,6 @@ impl<'a> Runner<'a> {
                     };
                     self.lambda_buffer.append(&mut evaluated_params);
                     self.entity = &entries[0];
-                    dbg!(&self.entity, &self.lambda_buffer);
                 }
                 Entity::FunctionCall(findex, params) => {
                     let evaluated_params = match params.len() {

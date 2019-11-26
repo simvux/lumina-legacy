@@ -460,7 +460,7 @@ pub trait BodySource {
                         previous.push(completed);
                         self.walk(Mode::Parameters(previous))
                     }
-                    Mode::Neutral => Ok(WalkResult::Value(completed)),
+                    Mode::Neutral => self.handle_after(completed),
                     Mode::Operator(left, op) => {
                         let operation = Token::new(
                             RawToken::Parameterized(
@@ -491,6 +491,17 @@ pub trait BodySource {
             Some((RawToken::Operator(op), source)) => self.walk(Mode::Operator(v, (op, source))),
             Some((RawToken::NewLine, _)) => self.handle_after(v),
             Some((RawToken::Key(Key::ParenClose), _)) => Ok(WalkResult::CloseParen(Some(v))),
+            Some((RawToken::Key(Key::Pipe), _)) => {
+                let inner = self.walk(Mode::Neutral)?;
+                let source = v.source_index;
+                match inner {
+                    WalkResult::Value(inner) => self.handle_after(Token::new(
+                        RawToken::Parameterized(Box::new(v), vec![inner], RefCell::default()),
+                        source,
+                    )),
+                    _ => unimplemented!(),
+                }
+            }
             _ => {
                 self.undo();
                 Ok(WalkResult::Value(v))
@@ -568,6 +579,21 @@ pub trait BodySource {
                         }
                         _ => panic!("{:?}", &v.inner), // TODO: Should this be an ET?
                     },
+                    WalkResult::CloseParen(v) => {
+                        let v = v.unwrap();
+                        let operation = Token::new(
+                            RawToken::Parameterized(
+                                Box::new(Token::new(
+                                    RawToken::Identifier(vec![op.0.identifier], None),
+                                    op.1,
+                                )),
+                                vec![left, v],
+                                RefCell::default(),
+                            ),
+                            op.1,
+                        );
+                        Ok(WalkResult::CloseParen(Some(operation)))
+                    }
                     _ => panic!("{:?}", v), // TODO: Should this be an ET?
                 }
             }
