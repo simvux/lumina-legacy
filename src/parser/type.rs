@@ -18,6 +18,7 @@ pub enum Type {
     Struct(i32, i32),
     Function(Box<(Vec<Type>, Type)>),
     Custom(String),
+    Infer,
 }
 
 impl std::default::Default for Type {
@@ -132,6 +133,7 @@ impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Type::Nothing => f.write_str("nothing"),
+            Type::Infer => f.write_str("?"),
             Type::Int => f.write_str("int"),
             Type::Float => f.write_str("float"),
             Type::Bool => f.write_str("bool"),

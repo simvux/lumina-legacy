@@ -283,14 +283,19 @@ pub trait BodySource {
                 self.handle_ident(mode, Token::new(t, token.source_index))
             }
             RawToken::Key(Key::Lambda) => {
-                let ident = {
+                let (ident, anot) = {
                     match self.next().map(|a| a.sep()) {
                         None => panic!("ET: Ended while expecting identifier for lambda"),
-                        Some((RawToken::Identifier(ident, _anot), _source_index)) => {
+                        Some((RawToken::Identifier(ident, anot), _source_index)) => {
                             if ident.len() != 1 {
                                 panic!("ET");
+                            }
+                            if anot.is_some() {
+                                (ident[0].to_owned(), anot)
                             } else {
-                                ident[0].to_owned()
+                                let (mut ident, anot) = annotation::into_annotated_str(ident)
+                                    .map_err(|e| e.to_err(token.source_index))?;
+                                (ident.remove(0), anot)
                             }
                         }
                         Some((_other, _source_index)) => panic!("ET: Got but expected"),
@@ -311,8 +316,10 @@ pub trait BodySource {
                         a.unwrap()
                     }
                 };
-
-                let v = Token::new(RawToken::Lambda(ident, Box::new(inner)), token.source_index);
+                let v = Token::new(
+                    RawToken::Lambda(ident, anot.map(|mut a| a.remove(0)), Box::new(inner)),
+                    token.source_index,
+                );
                 match mode {
                     Mode::Neutral => self.handle_ident(Mode::Neutral, v),
                     Mode::Operator(_, _) => {

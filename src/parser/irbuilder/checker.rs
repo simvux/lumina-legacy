@@ -5,7 +5,7 @@ use crate::parser::{Inlined, ParseError, ParseFault, RawToken, Token, Type};
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use super::lambda::Identifiable;
+use super::lambda::{IdentPool, Identifiable};
 use Identifiable::*;
 
 impl<'a> IrBuilder {
@@ -14,19 +14,18 @@ impl<'a> IrBuilder {
         source: &FunctionSource,
         ident: &[String],
         params: &'a [Type],
-        identpool: &HashMap<&str, (usize, &'a [Type])>,
+        identpool: &IdentPool<'a>,
     ) -> Result<Identifiable, ParseFault> {
         if ident.len() == 1 {
             let func = source.func(&self.parser);
+            if let Some((t, lamb)) = identpool.lambda(&ident[0]) {
+                return Ok(Identifiable::Lambda(lamb, t));
+            };
             if let Some(paramid) = func.get_parameter_from_ident(ident) {
                 return Ok(Identifiable::Param(paramid));
             };
             if let Some(whereid) = func.get_where_from_ident(ident) {
                 return Ok(Identifiable::Where(whereid));
-            };
-
-            if let Some(lamb) = identpool.get::<str>(&ident[0]) {
-                return Ok(Identifiable::Lambda(lamb.0, lamb.1));
             };
         }
         Ok(Identifiable::Function(self.parser.find_func((
@@ -39,8 +38,8 @@ impl<'a> IrBuilder {
     pub fn type_check(
         &'a self,
         token: &'a Token,
-        source: &FunctionSource,
-        identpool: HashMap<&'a str, (usize, &'a [Type])>,
+        source: &'a FunctionSource,
+        identpool: &mut IdentPool<'a>,
     ) -> Result<(Type, ir::Entity), ParseError> {
         macro_rules! discover_ident {
             ($ident:expr, $params:expr) => {{
@@ -64,9 +63,26 @@ impl<'a> IrBuilder {
                 source.returns(&self.parser).clone(),
                 ir::Entity::Unimplemented,
             )),
-            RawToken::ByPointer(box t) => {
-                unimplemented!();
-            }
+            RawToken::ByPointer(box t) => match &t.inner {
+                RawToken::Lambda(ident, anot, inner) => {
+                    let mut pool = identpool.clone();
+                    pool.tag_lambda(&ident, anot.clone());
+                    let (t, v) = self.type_check(&inner, source, &mut pool)?;
+                    let captured = pool.captured(&identpool);
+                    Ok((
+                        Type::Function(Box::new((
+                            vec![pool
+                                .lambda(&ident)
+                                .unwrap()
+                                .0
+                                .expect("ET: Could not infer type")],
+                            t,
+                        ))),
+                        ir::Entity::LambdaPointer(Box::new((v, captured))), // ir::Entity::Inlined(ir::Value::Function(Box::new(v))),
+                    ))
+                }
+                _ => unimplemented!("{:?}", t),
+            },
             RawToken::RustCall(bridged_id, r#type) => {
                 debug!("Handing type of rustcall constant {}", r#type);
                 Ok((
@@ -77,7 +93,7 @@ impl<'a> IrBuilder {
             RawToken::FirstStatement(entries) => {
                 let mut buf = Vec::with_capacity(entries.len());
                 for entry in entries[0..entries.len() - 1].iter() {
-                    let (_, v) = self.type_check(entry, source, identpool.clone())?;
+                    let (_, v) = self.type_check(entry, source, identpool)?;
                     buf.push(v);
                 }
                 let (t, v) = self.type_check(entries.last().unwrap(), source, identpool)?;
@@ -89,7 +105,7 @@ impl<'a> IrBuilder {
                 let mut param_types = p_types.borrow_mut();
                 let save_types = param_types.is_empty();
                 for param in params.iter() {
-                    let (t, v) = self.type_check(param, source, identpool.clone())?;
+                    let (t, v) = self.type_check(param, source, identpool)?;
                     if save_types {
                         param_types.push(t);
                     }
@@ -100,12 +116,30 @@ impl<'a> IrBuilder {
                     RawToken::Identifier(ident, _) => {
                         let param_types = p_types.borrow();
                         match discover_ident!(ident, &param_types) {
-                            Param(_) => {
-                                // TODO: `f x` where f: param<(a -> b)>
-                                unimplemented!();
+                            Param(id) => {
+                                // Lets make sure the parameter_types[id] is a function AND lets
+                                // then verify that those required parameters matches the ones from
+                                // param_entities. Now I think the lambda itself is already type
+                                // checked. so lets assume it's correct if these things match up
+                                if let Type::Function(box (takes, gives)) =
+                                    &source.func(&self.parser).parameter_types[id]
+                                {
+                                    if *takes != *p_types.borrow() {
+                                        panic!("ET: Type mismatch of given to parameter where param is function");
+                                    }
+                                    Ok((
+                                        gives.clone(),
+                                        ir::Entity::ParameterCall(id as u32, param_entities),
+                                    ))
+                                } else {
+                                    panic!("ET: {:?} cannot take parameters", ident);
+                                }
                             }
                             Where(_) => unimplemented!(),
-                            Lambda(lid, parameter_type) => unimplemented!(),
+                            Lambda(lid, parameter_type) => {
+                                println!("{}, {:?}", lid, parameter_type);
+                                unimplemented!();
+                            }
                             Function(newsource) => {
                                 // We don't want to type check forever in recursion
                                 if newsource == *source {
@@ -116,10 +150,11 @@ impl<'a> IrBuilder {
                                     ));
                                 }
                                 drop(param_types);
+                                let mut pool = IdentPool::new();
                                 let (t, v) = self.type_check(
                                     &newsource.func(&self.parser).body,
                                     &newsource,
-                                    HashMap::new(),
+                                    &mut pool,
                                 )?;
                                 let findex = self.gen_id(Cow::Borrowed(&newsource));
                                 self.complete(findex, v);
@@ -135,55 +170,59 @@ impl<'a> IrBuilder {
                             ir::Entity::RustCall(*bridged_id, param_entities),
                         ))
                     }
-                    RawToken::Lambda(ident, box inner) => {
+                    RawToken::Lambda(ident, _, box inner) => {
                         let mut new_pool = identpool.clone();
-                        let ptypes = p_types.borrow().clone();
-                        new_pool.insert(&ident, (identpool.len(), ptypes.as_slice()));
-                        let (t, v) = self.type_check(inner, source, new_pool)?;
+                        new_pool.tag_lambda(ident, None);
+                        let (t, v) = self.type_check(inner, source, &mut new_pool)?;
                         param_entities.insert(0, v);
                         Ok((t, ir::Entity::Lambda(param_entities)))
                     }
                     _ => panic!("{:#?} cannot take parameters", entry.inner),
                 }
             }
-            RawToken::Identifier(ident, _) => match discover_ident!(ident, &[]) {
-                Lambda(id, parameter_types) => Ok((
-                    parameter_types[0].clone(),
-                    ir::Entity::LambdaParam(id as u16),
-                )),
-                Param(id) => Ok((
-                    source.func(&self.parser).get_parameter_type(id).clone(),
-                    ir::Entity::Parameter(id as u16),
-                )),
-                Where(id) => {
-                    let (t, v) = self.type_check(
-                        &source.func(&self.parser).wheres[id].1,
-                        &source,
-                        HashMap::new(),
-                    )?;
-                    Ok((t, v))
+            RawToken::Identifier(ident, _) => {
+                let identified = discover_ident!(ident, &[]);
+                identpool.tag_usage(identified.clone());
+                match identified {
+                    Lambda(id, parameter_types) => Ok((
+                        parameter_types.clone().unwrap_or(Type::Infer), // TODO: Not sure about this one
+                        ir::Entity::LambdaParam(id as u16),
+                    )),
+                    Param(id) => Ok((
+                        source.func(&self.parser).get_parameter_type(id).clone(),
+                        ir::Entity::Parameter(id as u16),
+                    )),
+                    Where(id) => {
+                        let (t, v) = self.type_check(
+                            &source.func(&self.parser).wheres[id].1,
+                            &source,
+                            identpool,
+                        )?;
+                        Ok((t, v))
+                    }
+                    Function(source) => {
+                        const NO_ARGS: &[Type] = &[];
+                        let mut pool = IdentPool::new();
+                        let newsource = self
+                            .parser
+                            .find_func((source.fid(), ident.as_slice(), NO_ARGS))
+                            .map_err(|e| e.to_err(token.source_index))?;
+                        let (t, v) = self.type_check(
+                            &newsource.func(&self.parser).body,
+                            &newsource,
+                            &mut pool,
+                        )?;
+                        let findex = self.gen_id(Cow::Borrowed(&newsource));
+                        self.complete(findex, v);
+                        Ok((t, ir::Entity::FunctionCall(findex as u32, Vec::new())))
+                    }
                 }
-                Function(source) => {
-                    const NO_ARGS: &[Type] = &[];
-                    let newsource = self
-                        .parser
-                        .find_func((source.fid(), ident.as_slice(), NO_ARGS))
-                        .map_err(|e| e.to_err(token.source_index))?;
-                    let (t, v) = self.type_check(
-                        &newsource.func(&self.parser).body,
-                        &newsource,
-                        HashMap::new(),
-                    )?;
-                    let findex = self.gen_id(Cow::Borrowed(&newsource));
-                    self.complete(findex, v);
-                    Ok((t, ir::Entity::FunctionCall(findex as u32, Vec::new())))
-                }
-            },
+            }
             RawToken::IfExpression(expr) => {
                 let mut branch_buf = Vec::with_capacity((expr.branches.len() * 2) + 1);
                 let mut expect_type = None;
                 for (cond, eval) in expr.branches.iter() {
-                    let (ct, cv) = self.type_check(cond, source, identpool.clone())?;
+                    let (ct, cv) = self.type_check(cond, source, identpool)?;
                     if ct != Type::Bool {
                         panic!(
                             "ET: Condition must result in true or false, but I got {:?}",
@@ -191,7 +230,7 @@ impl<'a> IrBuilder {
                         );
                     }
                     branch_buf.push(cv);
-                    let (et, ev) = self.type_check(eval, source, identpool.clone())?;
+                    let (et, ev) = self.type_check(eval, source, identpool)?;
                     if let Some(expected) = &expect_type {
                         if et != *expected {
                             panic!(
@@ -223,7 +262,7 @@ impl<'a> IrBuilder {
                 let mut of_t: Option<Type> = None;
                 let mut list_buf = Vec::with_capacity(entries.len());
                 for (i, entry) in entries.iter().enumerate() {
-                    let (r#type, entity) = self.type_check(entry, source, identpool.clone())?;
+                    let (r#type, entity) = self.type_check(entry, source, identpool)?;
                     list_buf.push(entity);
                     match &of_t {
                         Some(t) => {

@@ -1,7 +1,9 @@
-use super::{BodySource, Key, ParseError, ParseFault, RawToken, Token, Tokenizer, Type};
+use super::{ParseFault, RawToken, Token, Type};
 use std::convert::TryFrom;
 
-pub fn into_annotated(mut path: Vec<String>) -> Result<RawToken, ParseFault> {
+pub fn into_annotated_str(
+    mut path: Vec<String>,
+) -> Result<(Vec<String>, Option<Vec<Type>>), ParseFault> {
     let s = path.as_slice().last().unwrap();
     for (i, c) in s.bytes().enumerate() {
         if c == b'<' {
@@ -16,7 +18,7 @@ pub fn into_annotated(mut path: Vec<String>) -> Result<RawToken, ParseFault> {
                     let ident = ident.to_owned();
                     path.pop();
                     path.push(ident);
-                    return Ok(RawToken::Identifier(path, Some(anot_buf)));
+                    return Ok((path, Some(anot_buf)));
                 }
             }
             panic!("Unmatched >")
@@ -25,7 +27,12 @@ pub fn into_annotated(mut path: Vec<String>) -> Result<RawToken, ParseFault> {
             panic!("Unmatched < (<> are used for type annotations, if you intend to use an operator then put a space between the words)");
         }
     }
-    Ok(RawToken::Identifier(path, None))
+    Ok((path, None))
+}
+
+pub fn into_annotated(path: Vec<String>) -> Result<RawToken, ParseFault> {
+    let (name, anot) = into_annotated_str(path)?;
+    Ok(RawToken::Identifier(name, anot))
 }
 
 pub fn annotated(t: Token) -> Result<Token, ParseFault> {

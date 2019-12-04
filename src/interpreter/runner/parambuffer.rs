@@ -1,5 +1,6 @@
 use crate::ir::Value;
 
+#[derive(Debug)]
 pub enum ParamBuffer<'p> {
     Borrowed(&'p [Value]),
     Owned(Vec<Value>),

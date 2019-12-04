@@ -11,6 +11,7 @@ mod fsource;
 pub mod generics;
 pub use fsource::FunctionSource;
 pub mod lambda;
+use lambda::IdentPool;
 
 //#[derive(Debug)]
 pub struct IrBuilder {
@@ -46,7 +47,7 @@ impl IrBuilder {
 
         let func = source.func(&self.parser);
         let (actual_return_value, entry) =
-            match self.type_check(&func.body, &source, HashMap::default()) {
+            match self.type_check(&func.body, &source, &mut IdentPool::new()) {
                 Ok(t) => t,
                 Err(e) => return e.with_parser(self.parser).into(),
             };

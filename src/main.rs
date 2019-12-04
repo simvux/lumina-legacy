@@ -73,5 +73,5 @@ fn main() {
     let runtime = interpreter::Runtime::new(ir);
     let entry = &runtime.instructions[entrypoint];
     let final_value = interpreter::Runner::start(&runtime, &entry, Vec::new().into());
-    debug!("{:#?}", final_value);
+    println!("{:?}", final_value);
 }

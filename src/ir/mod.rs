@@ -10,6 +10,7 @@ pub use value::Value;
 pub enum Entity {
     RustCall(u16, Vec<Entity>),
     FunctionCall(u32, Vec<Entity>),
+    ParameterCall(u32, Vec<Entity>),
     IfExpression(self::If<Entity>),
     FirstStatement(self::First<Entity>),
     Parameter(u16),
@@ -18,7 +19,15 @@ pub enum Entity {
     Inlined(Value),
     List(Vec<Entity>),
     Lambda(Vec<Entity>),
+    LambdaPointer(Box<(Entity, Vec<Capturable>)>),
 
     Unimplemented,
     Unique,
+}
+
+#[derive(Debug, Clone)]
+pub enum Capturable {
+    ParentParam(usize),
+    ParentWhere(usize),
+    ParentLambda(usize),
 }
