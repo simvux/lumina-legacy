@@ -2,22 +2,25 @@ use super::fsource::FunctionSource;
 use super::Type;
 use crate::ir::Capturable;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Identifiable {
     Param(usize),
     Function(FunctionSource),
-    Lambda(usize, Option<Type>),
+    Lambda(usize, Type),
     Where(usize),
 }
 
-impl From<Identifiable> for Capturable {
-    fn from(identifiable: Identifiable) -> Capturable {
+impl TryFrom<Identifiable> for Capturable {
+    type Error = ();
+
+    fn try_from(identifiable: Identifiable) -> Result<Capturable, Self::Error> {
         use Identifiable::*;
         match identifiable {
-            Param(n) => Capturable::ParentParam(n),
-            Where(n) => Capturable::ParentWhere(n),
-            Lambda(n, _) => Capturable::ParentLambda(n),
+            Param(n) => Ok(Capturable::ParentParam(n)),
+            Where(n) => Ok(Capturable::ParentWhere(n)),
+            Lambda(n, _) => Err(()),
             _ => unreachable!("{:?}", identifiable),
         }
     }
@@ -25,18 +28,20 @@ impl From<Identifiable> for Capturable {
 
 #[derive(Debug, Clone)]
 pub struct IdentPool<'a> {
-    lambdas: HashMap<&'a str, (Option<Type>, usize)>, // usize = nesting when created
+    //  lambdas: HashMap<&'a str, (Type, Identifiable)>, // usize = nesting when created
 
     // usize = usage_counter
     used: HashMap<Identifiable, usize>,
+    types: HashMap<&'a str, (Identifiable, Type)>,
     nesting: usize,
 }
 
 impl<'a> IdentPool<'a> {
     pub fn new() -> Self {
         IdentPool {
-            lambdas: HashMap::new(),
+            // lambdas: HashMap::new(),
             used: HashMap::new(),
+            types: HashMap::new(),
             nesting: 0,
         }
     }
@@ -51,12 +56,12 @@ impl<'a> IdentPool<'a> {
             }
         }
     }
-    pub fn tag_lambda(&mut self, name: &'a str, r#type: Option<Type>) {
-        self.lambdas.insert(name, (r#type, self.nesting));
+    pub fn add(&mut self, name: &'a str, source: Identifiable, t: Type) {
+        self.used.insert(source.clone(), 0);
+        self.types.insert(name, (source, t));
     }
-
-    pub fn lambda(&self, name: &str) -> Option<(Option<Type>, usize)> {
-        self.lambdas.get(name).cloned()
+    pub fn get_captured<'b>(&'b self, name: &str) -> Option<&'b Identifiable> {
+        self.types.get(name).map(|a| &a.0)
     }
 
     pub fn captured(&self, previous: &Self) -> Vec<Capturable> {
@@ -64,10 +69,12 @@ impl<'a> IdentPool<'a> {
         for (ident, used) in self.used.iter() {
             let should_capture = match previous.used.get(ident).copied() {
                 Some(a) => *used > a,
-                None => true,
+                None => false,
             };
             if should_capture {
-                buf.push(ident.clone().into());
+                if let Ok(c) = Capturable::try_from(ident.clone()) {
+                    buf.push(c);
+                }
             }
         }
         buf

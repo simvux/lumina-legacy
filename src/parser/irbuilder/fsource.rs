@@ -1,5 +1,5 @@
 use super::IrBuilder;
-use crate::parser::{FunctionBuilder, Parser, Token, Type};
+use crate::parser::{FunctionBuilder, Parser, RawToken, Token, Type};
 use std::borrow::Cow;
 use std::fmt;
 use std::hash::Hash;
@@ -31,6 +31,20 @@ impl From<(usize, usize)> for FunctionSource {
 impl From<(usize, FunctionBuilder)> for FunctionSource {
     fn from((fid, func): (usize, FunctionBuilder)) -> Self {
         Self::Owned(fid, Box::new(func))
+    }
+}
+
+impl From<(usize, String, Type)> for FunctionSource {
+    fn from((fid, names, types): (usize, String, Type)) -> Self {
+        let func = FunctionBuilder {
+            name: String::new(),
+            parameter_names: vec![names],
+            parameter_types: vec![types],
+            returns: Type::Infer,
+            body: Token::default(),
+            wheres: Vec::new(),
+        };
+        FunctionSource::from((fid, func))
     }
 }
 

@@ -4,6 +4,8 @@ use std::convert::TryFrom;
 pub fn into_annotated_str(
     mut path: Vec<String>,
 ) -> Result<(Vec<String>, Option<Vec<Type>>), ParseFault> {
+    // TODO: bruh what even is this code, no idea what mood I was in when writing this but it certainly
+    // doesn't look great now does. it
     let s = path.as_slice().last().unwrap();
     for (i, c) in s.bytes().enumerate() {
         if c == b'<' {

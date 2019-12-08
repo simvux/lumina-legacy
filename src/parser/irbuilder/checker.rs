@@ -1,7 +1,7 @@
 use super::fsource::FunctionSource;
 use super::IrBuilder;
 use crate::ir;
-use crate::parser::{Inlined, ParseError, ParseFault, RawToken, Token, Type};
+use crate::parser::{FunctionBuilder, Inlined, ParseError, ParseFault, RawToken, Token, Type};
 use std::borrow::Cow;
 use std::collections::HashMap;
 
@@ -18,8 +18,8 @@ impl<'a> IrBuilder {
     ) -> Result<Identifiable, ParseFault> {
         if ident.len() == 1 {
             let func = source.func(&self.parser);
-            if let Some((t, lamb)) = identpool.lambda(&ident[0]) {
-                return Ok(Identifiable::Lambda(lamb, t));
+            if let Some(ident) = identpool.get_captured(&ident[0]) {
+                return Ok(ident.clone());
             };
             if let Some(paramid) = func.get_parameter_from_ident(ident) {
                 return Ok(Identifiable::Param(paramid));
@@ -66,19 +66,22 @@ impl<'a> IrBuilder {
             RawToken::ByPointer(box t) => match &t.inner {
                 RawToken::Lambda(ident, anot, inner) => {
                     let mut pool = identpool.clone();
-                    pool.tag_lambda(&ident, anot.clone());
-                    let (t, v) = self.type_check(&inner, source, &mut pool)?;
+                    let mut new_func = FunctionBuilder::new();
+                    new_func.parameter_names = vec![ident.clone()];
+                    match anot {
+                        Some(t) => new_func.parameter_types = vec![t.clone()],
+                        None => new_func.parameter_types = vec![Type::Infer],
+                    }
+                    let new_source = FunctionSource::from((source.fid(), new_func));
+                    unimplemented!("Lambdas by pointer");
+                    let (t, v) = self.type_check(&inner, &new_source, &mut pool)?;
                     let captured = pool.captured(&identpool);
                     Ok((
                         Type::Function(Box::new((
-                            vec![pool
-                                .lambda(&ident)
-                                .unwrap()
-                                .0
-                                .expect("ET: Could not infer type")],
+                            new_source.func(&self.parser).parameter_types.clone(), // TODO: Clone can be avoided
                             t,
                         ))),
-                        ir::Entity::LambdaPointer(Box::new((v, captured))), // ir::Entity::Inlined(ir::Value::Function(Box::new(v))),
+                        ir::Entity::LambdaPointer(Box::new((v, captured))),
                     ))
                 }
                 _ => unimplemented!("{:?}", t),
@@ -170,12 +173,25 @@ impl<'a> IrBuilder {
                             ir::Entity::RustCall(*bridged_id, param_entities),
                         ))
                     }
-                    RawToken::Lambda(ident, _, box inner) => {
+                    RawToken::Lambda(param_names, anot, box inner) => {
                         let mut new_pool = identpool.clone();
-                        new_pool.tag_lambda(ident, None);
-                        let (t, v) = self.type_check(inner, source, &mut new_pool)?;
+                        let func = source.func(&self.parser);
+                        for (i, name) in func.parameter_names.iter().enumerate() {
+                            new_pool.add(
+                                name,
+                                Identifiable::Lambda(i, anot.clone().unwrap_or(Type::Infer)),
+                                func.parameter_types[i].clone(),
+                            );
+                        }
+                        let new_source = FunctionSource::from((
+                            source.fid(),
+                            param_names.clone(),
+                            anot.clone().unwrap_or(Type::Infer),
+                        )); // TODO: Multiple params
+                        let (t, v) = self.type_check(inner, &new_source, &mut new_pool)?;
+                        let captured = new_pool.captured(&identpool);
                         param_entities.insert(0, v);
-                        Ok((t, ir::Entity::Lambda(param_entities)))
+                        Ok((t, ir::Entity::Lambda(param_entities, captured)))
                     }
                     _ => panic!("{:#?} cannot take parameters", entry.inner),
                 }
@@ -185,7 +201,7 @@ impl<'a> IrBuilder {
                 identpool.tag_usage(identified.clone());
                 match identified {
                     Lambda(id, parameter_types) => Ok((
-                        parameter_types.clone().unwrap_or(Type::Infer), // TODO: Not sure about this one
+                        parameter_types.clone(), // TODO: Not sure about this one
                         ir::Entity::LambdaParam(id as u16),
                     )),
                     Param(id) => Ok((

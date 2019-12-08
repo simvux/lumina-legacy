@@ -80,16 +80,17 @@ impl<'a> Runner<'a> {
                 Entity::LambdaParam(n) => {
                     return self.lambda_buffer[*n as usize].clone();
                 }
-                Entity::Lambda(entries) => {
-                    let mut evaluated_params = match entries.len() - 1 {
+                Entity::Lambda(all, to_capture) => {
+                    let entries = &all[1..];
+                    let evaluated_params = match entries.len() {
                         0 => Vec::new(),
                         1 => {
-                            let new_params = self.params.consume();
-                            vec![self.spawn(&entries[1], new_params, self.lambda_buffer.clone())]
+                            let new_params = self.params.borrow();
+                            vec![self.spawn(&entries[0], new_params, self.lambda_buffer.clone())]
                         }
                         _ => {
                             let mut buf = Vec::with_capacity(entries.len());
-                            for p in entries[1..entries.len() - 1].iter() {
+                            for p in entries.iter() {
                                 buf.push(self.spawn(
                                     p,
                                     self.params.borrow(),
@@ -105,8 +106,18 @@ impl<'a> Runner<'a> {
                             buf
                         }
                     };
-                    self.lambda_buffer.append(&mut evaluated_params);
-                    self.entity = &entries[0];
+                    let mut buf = Vec::with_capacity(to_capture.len());
+                    for c in to_capture.iter() {
+                        match c {
+                            Capturable::ParentParam(n) => {
+                                buf.push(self.params.param_borrow(*n).clone())
+                            }
+                            _ => unimplemented!(),
+                        }
+                    }
+                    self.lambda_buffer = buf;
+                    self.params = evaluated_params.into();
+                    self.entity = &all[0];
                 }
                 Entity::FunctionCall(findex, params) => {
                     let evaluated_params = match params.len() {
@@ -136,7 +147,7 @@ impl<'a> Runner<'a> {
                     self.params = evaluated_params.into();
                     let entity = &self.runtime.instructions[*findex as usize];
                     self.entity = entity;
-                } //  _ => unimplemented!("{:?}", self.entity),
+                }
                 Entity::LambdaPointer(box (inner, to_capture)) => {
                     let mut captured = Vec::with_capacity(to_capture.len());
                     for capturable in to_capture.iter() {
@@ -147,8 +158,8 @@ impl<'a> Runner<'a> {
                             Capturable::ParentLambda(id) => {
                                 // TODO: Not sure about this
                                 // captured.push(self.lambda_buffer[*id].clone())
+                                unreachable!()
                             }
-                            Capturable::ParentLambda(_) => {},
                             Capturable::ParentWhere(_) => unimplemented!("`where <identifier>:` values cannot be captured into closures (yet)"),
                         }
                     }

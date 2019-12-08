@@ -18,7 +18,7 @@ pub enum Entity {
 
     Inlined(Value),
     List(Vec<Entity>),
-    Lambda(Vec<Entity>),
+    Lambda(Vec<Entity>, Vec<Capturable>),
     LambdaPointer(Box<(Entity, Vec<Capturable>)>),
 
     Unimplemented,
