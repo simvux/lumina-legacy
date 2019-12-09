@@ -79,7 +79,6 @@ impl<'a> IrBuilder {
                     )); // TODO: Multiple params
                     let (t, v) = self.type_check(inner, &new_source, &mut new_pool)?;
                     let captured = new_pool.captured(&identpool);
-                    dbg!(&captured, new_pool, identpool);
                     Ok((
                         Type::Function(Box::new((
                             anot.clone()
