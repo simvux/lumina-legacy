@@ -1,6 +1,7 @@
 use super::fsource::FunctionSource;
 use super::Type;
 use crate::ir::Capturable;
+use crate::parser::FunctionBuilder;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
@@ -69,7 +70,7 @@ impl<'a> IdentPool<'a> {
         for (ident, used) in self.used.iter() {
             let should_capture = match previous.used.get(ident).copied() {
                 Some(a) => *used > a,
-                None => false,
+                None => true,
             };
             if should_capture {
                 if let Ok(c) = Capturable::try_from(ident.clone()) {
@@ -78,5 +79,18 @@ impl<'a> IdentPool<'a> {
             }
         }
         buf
+    }
+    pub fn fill_from(&mut self, func: &'a FunctionBuilder, anot: &[Type], is_lambda: bool) {
+        for (i, name) in func.parameter_names.iter().enumerate() {
+            self.add(
+                name,
+                if is_lambda {
+                    Identifiable::Lambda(i, anot.get(0).cloned().unwrap_or(Type::Infer))
+                } else {
+                    Identifiable::Param(i)
+                },
+                func.parameter_types[i].clone(),
+            );
+        }
     }
 }
