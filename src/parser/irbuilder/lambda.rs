@@ -21,7 +21,7 @@ impl TryFrom<Identifiable> for Capturable {
         match identifiable {
             Param(n) => Ok(Capturable::ParentParam(n)),
             Where(n) => Ok(Capturable::ParentWhere(n)),
-            Lambda(n, _) => Err(()),
+            Lambda(n, _) => unimplemented!(),
             _ => unreachable!("{:?}", identifiable),
         }
     }
@@ -70,7 +70,7 @@ impl<'a> IdentPool<'a> {
         for (ident, used) in self.used.iter() {
             let should_capture = match previous.used.get(ident).copied() {
                 Some(a) => *used > a,
-                None => true,
+                None => false,
             };
             if should_capture {
                 if let Ok(c) = Capturable::try_from(ident.clone()) {
