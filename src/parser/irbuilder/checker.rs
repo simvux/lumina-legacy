@@ -65,26 +65,6 @@ impl<'a> IrBuilder {
             )),
             RawToken::ByPointer(box t) => match &t.inner {
                 RawToken::Lambda(param_names, anot, inner) => {
-                    /*
-                    let mut pool = identpool.clone();
-                    let mut new_func = FunctionBuilder::new();
-                    new_func.parameter_names = vec![ident.clone()];
-                    match anot {
-                        Some(t) => new_func.parameter_types = vec![t.clone()],
-                        None => new_func.parameter_types = vec![Type::Infer],
-                    }
-                    let new_source = FunctionSource::from((source.fid(), new_func));
-                    unimplemented!("Lambdas by pointer");
-                    let (t, v) = self.type_check(&inner, &new_source, &mut pool)?;
-                    let captured = pool.captured(&identpool);
-                    Ok((
-                        Type::Function(Box::new((
-                            new_source.func(&self.parser).parameter_types.clone(), // TODO: Clone can be avoided
-                            t,
-                        ))),
-                        ir::Entity::LambdaPointer(Box::new((v, captured))),
-                    ))
-                    */
                     let mut new_pool = identpool.clone();
                     let func = source.func(&self.parser);
                     new_pool.fill_from(
