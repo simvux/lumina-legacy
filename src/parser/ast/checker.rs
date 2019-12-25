@@ -233,6 +233,9 @@ impl<'a> IrBuilder {
                     Identifiable::Param(id) => {
                         Ok((found.r#type.clone(), ir::Entity::Parameter(id as u16)))
                     }
+                    Identifiable::Captured(id) => {
+                        Ok((found.r#type.clone(), ir::Entity::Captured(id as u16)))
+                    }
                     _ => unimplemented!("{:?}", found),
                 },
                 None => {
