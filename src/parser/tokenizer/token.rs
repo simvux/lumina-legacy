@@ -1,6 +1,5 @@
-use crate::parser::body::{IfExpr, MatchExpr};
-use crate::parser::Type;
-use std::cell::RefCell;
+use crate::parser::ast::Identifier;
+use crate::parser::Tracked;
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -9,72 +8,30 @@ pub use header::Header;
 mod key;
 pub use key::Key;
 mod inlined;
-pub use inlined::Inlined;
+pub use inlined::Inlinable;
 mod operator;
 pub use operator::Operator;
 
-#[derive(Clone, Default)]
-pub struct Token {
-    pub source_index: usize,
-    pub inner: RawToken,
-}
+pub type Token = Tracked<RawToken>;
 
-impl Token {
-    pub fn new(inner: RawToken, source_index: usize) -> Self {
-        Self {
-            source_index,
-            inner,
-        }
-    }
-
-    pub fn with_source_index(mut self, source_index: usize) -> Self {
-        self.source_index = source_index;
-        self
-    }
-
-    pub fn sep(self) -> (RawToken, usize) {
-        (self.inner, self.source_index)
-    }
-}
-
-impl fmt::Debug for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {:#?}", self.source_index, self.inner)
-    }
-}
-
-impl TryFrom<&[u8]> for Token {
+impl TryFrom<&str> for RawToken {
     type Error = ();
 
-    fn try_from(bytes: &[u8]) -> Result<Token, Self::Error> {
+    fn try_from(bytes: &str) -> Result<RawToken, Self::Error> {
         if bytes.is_empty() {
             return Err(());
         }
-        let find_inner = || {
-            if let Ok(t) = Header::try_from(bytes) {
-                return RawToken::Header(t);
-            }
-            if let Ok(t) = Key::try_from(bytes) {
-                return RawToken::Key(t);
-            }
-            if let Ok(t) = Inlined::try_from(bytes) {
-                return RawToken::Inlined(t);
-            }
-            if let Ok(t) = Operator::try_from(bytes) {
-                return RawToken::Operator(t);
-            }
-            if bytes == b"\n" {
-                return RawToken::NewLine;
-            }
-
-            RawToken::Identifier(vec![String::from_utf8(bytes.to_vec()).unwrap()], None)
-        };
-
-        let t = Token {
-            inner: find_inner(),
-            source_index: 0,
-        };
-        Ok(t)
+        if let Ok(t) = Header::try_from(bytes) {
+            Ok(RawToken::Header(t))
+        } else if let Ok(t) = Key::try_from(bytes) {
+            Ok(RawToken::Key(t))
+        } else if let Ok(t) = Inlinable::try_from(bytes) {
+            Ok(RawToken::Inlined(t))
+        } else if bytes == "\n" {
+            Ok(RawToken::NewLine)
+        } else {
+            Ok(RawToken::Identifier(Identifier::try_from(bytes)?))
+        }
     }
 }
 
@@ -86,51 +43,44 @@ pub struct Capture {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum RawToken {
-    Identifier(Vec<String>, Option<Vec<Type>>),
+    Identifier(Identifier),
 
     Header(Header),
     Key(Key),
-    Inlined(Inlined),
-    Parameters(Vec<Token>),
-    Parameterized(Box<Token>, Vec<Token>, RefCell<Vec<Type>>),
-    Lambda(String, Option<Type>, Box<Token>),
-    ByPointer(Box<Token>),
-
-    Operator(Operator),
-    IfExpression(IfExpr),
-    MatchExpression(MatchExpr),
-    FirstStatement(Vec<Token>),
-    List(Vec<Token>),
-    RustCall(u16, Type),
+    Inlined(Inlinable),
+    NewLine,
 
     // Special marker that automatically is placed on empty function bodies
     // Allows valid type checking but causes runtime crash
     Unimplemented,
-
-    NewLine,
 }
 
 impl fmt::Display for RawToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use RawToken::*;
         match self {
-            Identifier(ident, anot) => write!(
-                f,
-                "{}<{}>",
-                ident.join(":"),
-                anot.as_ref()
-                    .map(|a| a.as_slice())
-                    .unwrap_or(&[])
-                    .iter()
-                    .map(|a| a.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            ),
+            Identifier(ident) => {
+                let mut a = ident.path.iter().map(|i| i.as_str()).collect::<Vec<&str>>();
+                a.push(&ident.name);
+                write!(
+                    f,
+                    "{}<{}>",
+                    a.join(":"),
+                    ident
+                        .anot
+                        .as_ref()
+                        .map(|a| a.as_slice())
+                        .unwrap_or(&[])
+                        .iter()
+                        .map(|a| a.to_string())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
             Header(h) => h.fmt(f),
             Key(key) => key.fmt(f),
             Inlined(inlined) => inlined.fmt(f),
-            // Operation(_, op) => write!(f, "... {} ...", op),
-            Operator(op) => write!(f, "{}", op),
+            NewLine => write!(f, "\\n"),
             _ => panic!("TODO: Format {:?}", self),
         }
     }
@@ -138,23 +88,6 @@ impl fmt::Display for RawToken {
 
 impl Default for RawToken {
     fn default() -> Self {
-        RawToken::NewLine
+        RawToken::Unimplemented
     }
-}
-
-impl PartialEq for Token {
-    fn eq(&self, other: &Token) -> bool {
-        self.inner.eq(&other.inner)
-    }
-}
-
-pub const ALLOWED_IDENTIFIER_CHARACTERS: &[u8] = b"abcdefghijklmnopqrstuvwxyz1234567890-_<>";
-pub fn is_valid_identifier(ident: &str) -> bool {
-    for c in ident.bytes() {
-        if !ALLOWED_IDENTIFIER_CHARACTERS.contains(&c) {
-            return false;
-        }
-    }
-    let trimmed = ident.trim();
-    trimmed.parse::<i64>().is_err()
 }

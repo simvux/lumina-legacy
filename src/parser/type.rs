@@ -1,10 +1,10 @@
-use super::{BodySource, ParseError, ParseFault, RawToken, Tokenizer};
+use super::ast::{Identifier, IdentifierType};
+use super::{ParseError, ParseFault, Tokenizer};
+use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::fmt;
-
-pub trait Typeable {
-    fn of_type(&self) -> Type;
-}
+use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub enum Type {
@@ -17,9 +17,43 @@ pub enum Type {
     List(Box<Type>),
     Struct(i32, i32),
     Function(Box<(Vec<Type>, Type)>),
-    Custom(String),
-    Infer,
+    Custom(Identifier),
 }
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum MaybeType {
+    Infer(Rc<RefCell<Option<Type>>>),
+    Known(Type),
+}
+impl MaybeType {
+    pub fn new() -> Self {
+        Self::Infer(Rc::new(RefCell::new(None)))
+    }
+    pub fn unwrap(self) -> Type {
+        match self {
+            MaybeType::Infer(t) => t.borrow().clone().unwrap(),
+            MaybeType::Known(t) => t,
+        }
+    }
+    /*
+    pub fn try_unwrap(&self) -> Option<&Type> {
+        match self {
+            MaybeType::Infer(t) => t.borrow().as_ref(),
+            MaybeType::Known(t) => Some(t),
+        }
+    }
+    */
+}
+impl Hash for MaybeType {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            MaybeType::Infer(t) => t.borrow().as_ref().unwrap_or(&Type::Nothing).hash(state),
+            MaybeType::Known(t) => t.hash(state),
+        }
+    }
+}
+
+impl Type {}
 
 impl std::default::Default for Type {
     fn default() -> Self {
@@ -27,64 +61,10 @@ impl std::default::Default for Type {
     }
 }
 
-pub fn parse_type_decl(
-    tokenizer: &mut Tokenizer,
+pub fn parse_type_decl<I: Iterator<Item = char>>(
+    tokenizer: &mut Tokenizer<I>,
 ) -> Result<(String, Vec<(String, Type)>), ParseError> {
-    let first = match tokenizer.next() {
-        None => {
-            return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
-                vec!["custom type name".into()],
-                None,
-            )])
-            .to_err(0)
-            .into()
-        }
-        Some(t) => t,
-    };
-    let type_name = match first.inner {
-        RawToken::Identifier(mut name, anot) => {
-            if name.len() != 1 {
-                panic!("ET: Type name cannot be external");
-            } else {
-                name.remove(0)
-            }
-        }
-        _ => panic!("ERROR_TODO: Wanted type name, got {:?}", first),
-    };
-    let mut fields = Vec::new();
-    loop {
-        if tokenizer.next().map(|t| t.inner) != Some(RawToken::NewLine) {
-            panic!("Expected newline")
-        }
-        tokenizer.skip_spaces_and_newlines();
-
-        let next = tokenizer.next().expect("ERROR_TODO: File ended");
-        let field_name = match next.inner {
-            RawToken::Identifier(mut field_name, anot) => {
-                if field_name.len() != 1 {
-                    panic!("ET: Custom Type name cannot be external");
-                } else {
-                    field_name.remove(0)
-                }
-            }
-            RawToken::Header(h) => {
-                tokenizer.regress(h.as_str().len() + 1);
-                break;
-            }
-            _ => panic!("ERROR_TODO: Unexpected thingy in field decl, {:?}", next),
-        };
-        let next = tokenizer.next().expect("ERROR_TODO");
-        match next.inner {
-            RawToken::Identifier(type_name, anot) => {
-                fields.push((field_name.to_owned(), Type::try_from(type_name).unwrap()))
-            }
-            _ => panic!(
-                "ERROR_TODO: Invalid syntax in field decleration, got {:?}",
-                next
-            ),
-        }
-    }
-    Ok((type_name, fields))
+    unimplemented!();
 }
 
 impl TryFrom<&str> for Type {
@@ -108,6 +88,7 @@ impl TryFrom<&str> for Type {
             "int" => Type::Int,
             "float" => Type::Float,
             "nothing" => Type::Nothing,
+            "bool" => Type::Bool,
             "_" => Type::Nothing,
             // TODO: Custom types need to be passed as okay!
             _ => return Err(ParseFault::NotValidType(source.into())),
@@ -129,11 +110,80 @@ impl TryFrom<Vec<String>> for Type {
     }
 }
 
+pub fn splice_to<I: Iterator<Item = char>>(iter: &mut I, points: &str) -> Option<(char, Type)> {
+    let mut s = String::new();
+    while let Some(c) = iter.next() {
+        if points.contains(|a| a == c) {
+            let t = Type::try_from(s.trim()).expect("ET");
+            return Some((c, t));
+        }
+        match c {
+            '[' => {
+                if !s.is_empty() {
+                    panic!("ET: Unexpected [");
+                }
+                let (a, t) = splice_to(iter, "]")?;
+                assert_eq!(a, ']');
+                let after = iter.next();
+                return Some((after.unwrap_or(a), Type::List(Box::new(t))));
+            }
+            '<' => {
+                let anot = annotation(iter).expect("ET");
+                return Some((
+                    '>',
+                    (Type::Custom(Identifier {
+                        path: Vec::new(),
+                        name: s,
+                        anot: Some(anot),
+                        kind: IdentifierType::Normal,
+                    })),
+                ));
+            }
+            _ => {}
+        }
+        s.push(c);
+    }
+    None
+}
+
+pub fn annotation<I: Iterator<Item = char>>(iter: &mut I) -> Option<Vec<Type>> {
+    let mut annotations = Vec::new();
+    loop {
+        match splice_to(iter, ",>") {
+            Some((was, t)) => match was {
+                ',' => {
+                    annotations.push(t);
+                }
+                '>' => {
+                    annotations.push(t);
+                    if let Some(c) = iter.next() {
+                        panic!("ET: Unexpected {}", c);
+                    }
+                    return Some(annotations);
+                }
+                _ => unreachable!(),
+            },
+            None => panic!("ET: Annotation missing `>`"),
+        }
+    }
+}
+
+impl fmt::Display for MaybeType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MaybeType::Infer(t) => match t.borrow().as_ref() {
+                Some(known) => known.fmt(f),
+                None => write!(f, "?"),
+            },
+            MaybeType::Known(known) => known.fmt(f),
+        }
+    }
+}
+
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Type::Nothing => f.write_str("nothing"),
-            Type::Infer => f.write_str("?"),
             Type::Int => f.write_str("int"),
             Type::Float => f.write_str("float"),
             Type::Bool => f.write_str("bool"),

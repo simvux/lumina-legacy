@@ -1,4 +1,5 @@
-use super::{ParseFault, RawToken, Token, Type};
+use super::ast::{Identifier, IdentifierType};
+use super::{ParseFault, RawToken, Type};
 use std::convert::TryFrom;
 
 pub fn into_annotated_str(
@@ -33,15 +34,12 @@ pub fn into_annotated_str(
 }
 
 pub fn into_annotated(path: Vec<String>) -> Result<RawToken, ParseFault> {
-    let (name, anot) = into_annotated_str(path)?;
-    Ok(RawToken::Identifier(name, anot))
-}
-
-pub fn annotated(t: Token) -> Result<Token, ParseFault> {
-    if let RawToken::Identifier(ident, _anot) = t.inner {
-        let source = t.source_index;
-        into_annotated(ident).map(|a| Token::new(a, source))
-    } else {
-        Ok(t)
-    }
+    let (mut path, anot) = into_annotated_str(path)?;
+    let name = path.pop().unwrap();
+    Ok(RawToken::Identifier(Identifier {
+        name,
+        anot,
+        kind: IdentifierType::Normal,
+        path,
+    }))
 }

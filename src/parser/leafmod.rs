@@ -1,4 +1,4 @@
-use super::{FunctionBuilder, Type};
+use super::{FunctionBuilder, Identifier, ParseFault, Type};
 use crate::env::Environment;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -14,7 +14,7 @@ pub enum FileSource {
 
 pub struct ParseModule {
     //                     identifer       parameters
-    pub function_ids: HashMap<String, HashMap<Vec<Type>, usize>>,
+    pub function_ids: HashMap<Identifier, HashMap<Vec<Type>, usize>>,
     pub functions: Vec<FunctionBuilder>,
 
     pub types: HashMap<String, usize>,
@@ -34,6 +34,12 @@ impl ParseModule {
             imports: HashMap::new(),
             module_path,
         }
+    }
+    pub fn get_import(&self, name: &str) -> Result<usize, ParseFault> {
+        self.imports
+            .get(name)
+            .cloned()
+            .ok_or_else(|| ParseFault::ModuleNotImported(name.to_owned()))
     }
 }
 

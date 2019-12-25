@@ -25,7 +25,7 @@ pub enum Entity {
     Unique,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Capturable {
     ParentParam(usize),
     ParentWhere(usize),

@@ -1,207 +1,283 @@
 mod token;
+use super::Tracked;
 use std::convert::TryFrom;
-pub use token::{
-    is_valid_identifier, Capture, Header, Inlined, Key, Operator, RawToken, Token,
-    ALLOWED_IDENTIFIER_CHARACTERS,
-};
+use std::iter::Peekable;
+pub use token::{Capture, Header, Inlinable, Key, Operator, RawToken, Token};
 
-pub struct Tokenizer<'s> {
-    source_code: &'s [u8],
-    history: Vec<usize>,
-    index: usize,
+pub struct Tokenizer<I: Iterator<Item = char>> {
+    source_code: Peekable<I>,
+    pub position: usize,
+
+    // For the peek implementation
+    pending: Vec<Tracked<RawToken>>,
 }
 
-const BREAK_AT: &[u8] = b" ,()[]+*/\n#{}#";
-const IGNORES_SPACE: &[u8] = b",([+*/\n#{}#\\";
-// &[(x, [y])] -> Only early-breaks on x if the next byte isn't any of y
-const MAYBE_IGNORES_SPACE: &[(u8, &[u8])] = &[
-    (b'-', &[b'>']),
-    (b'!', &[b'=']),
-    (b':', ALLOWED_IDENTIFIER_CHARACTERS),
-];
+const DEFAULT_STOPPERS: &[char] = &[' ', ',', '(', ')', '[', ']', '\n', '#', '{', '}', '\\'];
+const SINGLES: &[char] = &['(', '[', '{', '\n', ')', ']', '}', ',', '\\', '#'];
 
-impl<'s> From<&'s [u8]> for Tokenizer<'s> {
-    fn from(source_code: &'s [u8]) -> Self {
+impl<I: Iterator<Item = char>> From<Peekable<I>> for Tokenizer<I> {
+    fn from(source_code: Peekable<I>) -> Self {
         Self {
             source_code,
-            history: vec![0],
-            index: 0,
+            pending: Vec::new(),
+            position: 0,
         }
     }
 }
 
-impl<'s> Tokenizer<'s> {
-    pub fn push_history(&mut self, n: usize) {
-        // We don't need more than 3 in history, so lets reuse some allocations
-        if self.history.len() == 3 {
-            self.history[0] = self.history[1];
-            self.history[1] = self.history[2];
-            self.history[2] = n;
-        } else {
-            self.history.push(n);
-        }
-    }
-    pub fn pop_history(&mut self) -> usize {
-        self.history.pop().unwrap_or(0)
-    }
-    pub fn index(&self) -> usize {
-        self.index
-    }
-    pub fn regress(&mut self, n: usize) {
-        self.index -= n;
-    }
-    fn progress(&mut self, n: usize) {
-        self.index += n;
-    }
-    fn progress_until<F>(&mut self, mut predicate: F) -> bool
-    where
-        F: FnMut(&mut Self) -> bool,
-    {
-        loop {
-            if self.source_code.len() <= self.index {
-                break false;
-            }
-            if predicate(self) {
-                break true;
-            }
-            self.progress(1);
-        }
-    }
-    pub fn next_char(&mut self) -> u8 {
-        let mut i = 1;
-        loop {
-            let c = self.source_code[self.index + i];
-            if c != b' ' && c != b'\n' {
-                return c;
-            }
-            i += 1;
-        }
-    }
+impl<I: Iterator<Item = char>> Tokenizer<I> {
     pub fn skip_spaces_and_newlines(&mut self) {
-        let c = self.source_code.get(self.index);
-        match c {
-            Some(b' ') | Some(b'\n') => {
-                self.progress(1);
-                self.skip_spaces_and_newlines();
-            }
-            Some(b'/') => {
-                let next = self.source_code.get(self.index + 1).copied();
-                if next == Some(b'/') {
-                    self.progress_until(|s| s.source_code[s.index] == b'\n');
-                    self.skip_spaces_and_newlines();
-                } else if next == Some(b'*') {
-                    self.progress_until(|s| {
-                        (s.source_code[s.index] == b'*' && s.next_char() == b'/')
-                    });
-                }
-            }
-            _ => {}
-        }
+        self.skip_until(|c| c != '\n' && c != ' ')
     }
-
-    fn prettified_index(&self) -> usize {
-        let mut offset = 0;
+    pub fn skip_until(&mut self, predicate: impl Fn(char) -> bool) {
         loop {
-            let c = match self.source_code.get(self.index + offset) {
-                None => return self.index + offset - 1,
-                Some(c) => *c,
-            };
-            if c == b' ' || c == b'\n' {
-                offset += 1;
-            } else {
-                return self.index + offset;
+            let c = self.source_code.peek();
+            match c {
+                None => return,
+                Some(c) => {
+                    if predicate(*c) {
+                        return;
+                    }
+                    self.walk();
+                }
             }
         }
     }
 
-    fn gather_to(&mut self, stoppers: &'s [u8]) -> &'s [u8] {
-        let origin = self.index;
-        let c = match self.source_code.get(self.index) {
-            Some(c) => *c,
-            None => return &[],
-        };
-        if c == b' ' {
-            self.progress(1);
-            return self.gather_to(stoppers);
-        }
-        if c == b'/' {
-            let next = self.source_code.get(self.index + 1).copied();
-            // Single line comment
-            if next == Some(b'/') {
-                self.progress_until(|s| s.source_code[s.index] == b'\n');
-                self.progress(1);
-                return self.gather_to(stoppers);
-            }
-            if next == Some(b'*') {
-                let found_comment_exit = self
-                    .progress_until(|s| (s.source_code[s.index] == b'*' && s.next_char() == b'/'));
-                self.progress(1);
-                if !found_comment_exit {
-                    return &[];
-                }
-                self.progress(1);
-                return self.gather_to(stoppers);
-            }
-        }
-        for cmp_against in IGNORES_SPACE.iter().cloned() {
-            if c == cmp_against {
-                self.progress(1);
-                return &self.source_code[origin..self.index];
-            }
-        }
-        for (cmp_against, unless_buf) in MAYBE_IGNORES_SPACE.iter().cloned() {
-            if c == cmp_against && !unless_buf.contains(&self.next_char()) {
-                self.progress(1);
-                return &self.source_code[origin..self.index];
-            }
-        }
+    fn walk(&mut self) -> Option<char> {
+        self.position += 1;
+        self.source_code.next()
+    }
+
+    fn gather_to(&mut self, stoppers: &[char]) -> (char, String) {
+        let mut buf = String::new();
+        self.skip_until(|c| c != ' ');
         loop {
-            self.progress(1);
-            let c = match self.source_code.get(self.index) {
-                Some(c) => *c,
-                None => return &self.source_code[origin..self.index],
+            let c = match self.source_code.peek() {
+                None => return (0 as char, buf),
+                Some(c) => c,
             };
-            if stoppers.contains(&c) {
-                return &self.source_code[origin..self.index];
+            if buf.is_empty() && SINGLES.contains(&c) {
+                buf.push(*c);
+                return (self.walk().unwrap(), buf);
+            }
+            match c {
+                '/' => {
+                    self.walk();
+                    let after = self.source_code.peek();
+                    match after {
+                        Some('/') => {
+                            self.walk();
+                            self.single_line_comment();
+                        }
+                        Some('*') => {
+                            self.walk();
+                            self.multi_line_comment();
+                        }
+                        None => return (0 as char, buf),
+                        _ => {
+                            if stoppers.contains(&'/') {
+                                return ('/', buf);
+                            } else {
+                                self.walk();
+                                buf.push('/');
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    if stoppers.contains(&c) {
+                        return (*c, buf);
+                    } else {
+                        buf.push(self.walk().unwrap());
+                    }
+                }
+            }
+        }
+    }
+
+    fn single_line_comment(&mut self) {
+        loop {
+            let c = self.walk();
+            if c == None || c == Some('\n') {
+                return;
+            }
+        }
+    }
+    fn multi_line_comment(&mut self) {
+        loop {
+            let c = match self.walk() {
+                None => panic!("ET: Unmatched /*"),
+                Some(a) => a,
+            };
+            if c == '*' && self.source_code.peek() == Some(&'/') {
+                self.walk();
+                break;
             }
         }
     }
 }
 
-impl<'s> super::body::BodySource for Tokenizer<'s> {
-    fn next(&mut self) -> Option<Token> {
-        // self.last_index = self.index;
-        self.push_history(self.index);
-        let source_index = self.prettified_index();
+impl<I: Iterator<Item = char>> Iterator for Tokenizer<I> {
+    type Item = Token;
 
-        let raw = self.gather_to(BREAK_AT);
-        let mut t = Token::try_from(raw)
-            .ok()
-            .map(|t| t.with_source_index(source_index))?;
-
-        if let RawToken::Identifier(entries, _anot) = &mut t.inner {
-            let mut spl = entries[0].split(':');
-
-            // TODO: Can avoid allocations
-            let mut buf: Vec<String> = Vec::new();
-            buf.push(spl.next().unwrap().to_owned());
-
-            for additional in spl {
-                if additional.is_empty() {
-                    // for overflow in spl {
-                    //     self.regress(overflow.len() + 1);
-                    // }
-                    *entries = buf;
-                    return Some(t);
-                }
-                buf.push(additional.to_string());
-            }
-            *entries = buf;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(t) = self.pending.pop() {
+            return Some(t);
         }
-
-        Some(t)
+        let source = self.position;
+        let (brk, chunk) = self.gather_to(DEFAULT_STOPPERS);
+        if brk == 0 as char && chunk.is_empty() {
+            return None;
+        }
+        match RawToken::try_from(chunk.as_str()) {
+            Ok(rt) => {
+                self.skip_until(|c| c != ' ');
+                Some(Tracked::new(rt).set(source))
+            }
+            Err(_) => None,
+        }
     }
-    fn undo(&mut self) {
-        self.index = self.pop_history();
+}
+
+impl<I: Iterator<Item = char>> TokenSource for Tokenizer<I> {
+    fn peek(&mut self) -> Option<&Token> {
+        if self.pending.is_empty() {
+            let t = self.next()?;
+            self.pending.push(t);
+            self.pending.last()
+        } else {
+            self.pending.last()
+        }
+    }
+}
+
+pub trait TokenSource: Iterator<Item = Token> {
+    fn peek(&mut self) -> Option<&Token>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::{Identifier, IdentifierType, Inlinable};
+
+    fn test(code: &str) -> Vec<RawToken> {
+        let iter = code.chars().peekable();
+        let tokenizer = Tokenizer::from(iter);
+        tokenizer.map(|t| t.inner).collect()
+    }
+    fn num(n: i64) -> RawToken {
+        RawToken::Inlined(Inlinable::Int(n))
+    }
+    fn func(path: &str) -> RawToken {
+        ident(path, IdentifierType::Normal)
+    }
+    fn oper(path: &str) -> RawToken {
+        ident(path, IdentifierType::Operator)
+    }
+    fn ident(path: &str, kind: IdentifierType) -> RawToken {
+        let mut path = path
+            .split(|c| c == ':')
+            .map(|s| s.to_owned())
+            .collect::<Vec<String>>();
+        let name = path.pop().unwrap();
+        RawToken::Identifier(Identifier {
+            name,
+            path,
+            kind,
+            anot: None,
+        })
+    }
+
+    #[test]
+    fn operator() {
+        let result = test("4 + 4 + 4");
+        assert_eq!(result, vec![num(4), oper("+"), num(4), oper("+"), num(4)]);
+    }
+
+    #[test]
+    fn function() {
+        let result = test("math:add 4 4");
+        assert_eq!(result, vec![func("math:add"), num(4), num(4)]);
+    }
+
+    #[test]
+    fn complicated() {
+        let result = test("math:add (4 + 4) << (1 + 1) + << 1 + 1");
+        assert_eq!(
+            result,
+            vec![
+                func("math:add"),
+                RawToken::Key(Key::ParenOpen),
+                num(4),
+                oper("+"),
+                num(4),
+                RawToken::Key(Key::ParenClose),
+                RawToken::Key(Key::Pipe),
+                RawToken::Key(Key::ParenOpen),
+                num(1),
+                oper("+"),
+                num(1),
+                RawToken::Key(Key::ParenClose),
+                oper("+"),
+                RawToken::Key(Key::Pipe),
+                num(1),
+                oper("+"),
+                num(1),
+            ]
+        )
+    }
+
+    #[test]
+    fn weird_spaces() {
+        let result = test("math:add( 4 + 2)<< 3 + 3");
+        assert_eq!(
+            result,
+            vec![
+                func("math:add"),
+                RawToken::Key(Key::ParenOpen),
+                num(4),
+                oper("+"),
+                num(2),
+                RawToken::Key(Key::ParenClose),
+                RawToken::Key(Key::Pipe),
+                num(3),
+                oper("+"),
+                num(3),
+            ]
+        )
+    }
+
+    #[test]
+    fn lambda() {
+        let result = test("\\n -> n + 1");
+        assert_eq!(
+            result,
+            vec![
+                RawToken::Key(Key::Lambda),
+                func("n"),
+                RawToken::Key(Key::Arrow),
+                func("n"),
+                oper("+"),
+                num(1),
+            ]
+        )
+    }
+
+    #[test]
+    fn closure() {
+        let result = test("#(\\n -> n)");
+        assert_eq!(
+            result,
+            vec![
+                RawToken::Key(Key::ClosureMarker),
+                RawToken::Key(Key::ParenOpen),
+                RawToken::Key(Key::Lambda),
+                func("n"),
+                RawToken::Key(Key::Arrow),
+                func("n"),
+                RawToken::Key(Key::ParenClose),
+            ]
+        )
     }
 }

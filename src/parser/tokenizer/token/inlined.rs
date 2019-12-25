@@ -2,59 +2,64 @@ use crate::ir::Value;
 use std::convert::TryFrom;
 use std::fmt;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Inlined {
+#[derive(PartialEq, Clone)]
+pub enum Inlinable {
     Int(i64),
     Float(f64),
     Bool(bool),
     Nothing,
 }
 
-impl TryFrom<&[u8]> for Inlined {
+impl TryFrom<&str> for Inlinable {
     type Error = ();
 
-    fn try_from(bytes: &[u8]) -> Result<Inlined, ()> {
-        let as_str = String::from_utf8(bytes.to_vec()).unwrap();
-        if let Ok(int) = as_str.parse::<i64>() {
-            return Ok(Inlined::Int(int));
+    fn try_from(bytes: &str) -> Result<Inlinable, ()> {
+        if let Ok(int) = bytes.parse::<i64>() {
+            return Ok(Inlinable::Int(int));
         };
-        if let Ok(float) = as_str.parse::<f64>() {
-            return Ok(Inlined::Float(float));
+        if let Ok(float) = bytes.parse::<f64>() {
+            return Ok(Inlinable::Float(float));
         };
-        if let Ok(boolean) = as_str.parse::<bool>() {
-            return Ok(Inlined::Bool(boolean));
+        if let Ok(boolean) = bytes.parse::<bool>() {
+            return Ok(Inlinable::Bool(boolean));
         }
-        if bytes == b"_" {
-            return Ok(Inlined::Nothing);
+        if bytes == "_" {
+            return Ok(Inlinable::Nothing);
         }
-        if bytes.first().copied() == Some(b'"') {
+        let first = bytes.chars().next();
+        if first == Some('"') {
             unimplemented!("string literals");
         }
-        if bytes.first().copied() == Some(b'\'') {
+        if first == Some('\'') {
             unimplemented!("byte literals");
         }
         Err(())
     }
 }
 
-impl fmt::Display for Inlined {
+impl fmt::Display for Inlinable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Inlined::Int(n) => write!(f, "{}", n),
-            Inlined::Float(n) => write!(f, "{}", n),
-            Inlined::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
-            Inlined::Nothing => f.write_str("_"),
+            Inlinable::Int(n) => write!(f, "{}", n),
+            Inlinable::Float(n) => write!(f, "{}", n),
+            Inlinable::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
+            Inlinable::Nothing => f.write_str("_"),
         }
     }
 }
+impl fmt::Debug for Inlinable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
 
-impl From<Inlined> for Value {
-    fn from(inlined: Inlined) -> Value {
+impl From<Inlinable> for Value {
+    fn from(inlined: Inlinable) -> Value {
         match inlined {
-            Inlined::Int(n) => Value::Int(n),
-            Inlined::Float(n) => Value::Float(n),
-            Inlined::Nothing => Value::Nothing,
-            Inlined::Bool(b) => Value::Bool(b),
+            Inlinable::Int(n) => Value::Int(n),
+            Inlinable::Float(n) => Value::Float(n),
+            Inlinable::Nothing => Value::Nothing,
+            Inlinable::Bool(b) => Value::Bool(b),
         }
     }
 }

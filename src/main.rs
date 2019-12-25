@@ -1,4 +1,5 @@
 #![feature(box_patterns)]
+#![feature(mem_take)]
 #![feature(print_internals)]
 use std::fs::File;
 use std::io::Read;
@@ -6,15 +7,6 @@ use std::rc::Rc;
 
 pub fn entrypoint() -> FileSource {
     FileSource::Project(vec!["main".to_owned()])
-}
-
-macro_rules! debug {
-    ($($arg:tt)*) => (
-        #[cfg(debug_assertions)]
-        print!(" leaf -> ");
-        #[cfg(debug_assertions)]
-        println!($($arg)*);
-    )
 }
 
 mod parser;
@@ -34,39 +26,47 @@ fn main() {
         }
     };
     let mut parser = Parser::new(environment.clone());
-    parser.read_prelude_source();
+    if let Err(e) = parser.read_prelude_source() {
+        println!("{}", e.with_parser(parser));
+        return;
+    }
 
-    let mut source_code = Vec::with_capacity(20);
+    let mut source_code = String::with_capacity(20);
     File::open(&environment.entrypoint)
         .unwrap()
-        .read_to_end(&mut source_code)
+        .read_to_string(&mut source_code)
         .unwrap();
     let file_path = entrypoint();
 
     // Construct a raw token representation of the code
-    let fid = match parser.tokenize(file_path.clone(), &source_code) {
+    let fid = match parser.tokenize(file_path.clone(), source_code.chars()) {
         Ok(functions) => functions,
         Err(e) => {
             println!(
                 "{}",
-                e.with_source_code(&source_code, &file_path)
+                e.with_source_code(source_code, &file_path)
                     .with_parser(parser)
             );
             return;
         }
     };
-    debug!("{:#?}", parser);
+    #[cfg(debug_assertions)]
+    println!("{:#?}", parser);
 
     // Verify syntax, infer types and compile to low-level IR.
     let (ir, entrypoint) =
         match IrBuilder::new(parser, environment).start_type_checker(fid, "main", &[]) {
             Err(e) => {
-                println!("{}", e.with_source_code(&source_code, &file_path));
+                println!("{}", e.with_source_code(source_code, &file_path));
                 return;
             }
             Ok(ir) => ir,
         };
-    debug!("Initializing runtime with entry {:?}", entrypoint);
+    #[cfg(debug_assertions)]
+    println!("Initializing runtime with entry {:?}", entrypoint);
+    #[cfg(debug_assertions)]
+    println!("{:#?}", ir);
+
     drop(file_path);
     drop(source_code);
 

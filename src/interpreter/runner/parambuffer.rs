@@ -4,7 +4,8 @@ use crate::ir::Value;
 pub enum ParamBuffer<'p> {
     Borrowed(&'p [Value]),
     Owned(Vec<Value>),
-    // Lazy(Iter<>), ?
+    SingleBorrowed(&'p Value),
+    SingleOwned(Value),
 }
 use ParamBuffer::*;
 
@@ -13,32 +14,36 @@ impl<'p> ParamBuffer<'p> {
         match self {
             Borrowed(a) => ParamBuffer::Borrowed(a),
             Owned(a) => ParamBuffer::Borrowed(&a),
+            SingleOwned(a) => ParamBuffer::SingleBorrowed(a),
+            SingleBorrowed(a) => ParamBuffer::SingleBorrowed(a),
         }
     }
     pub fn consume(&mut self) -> ParamBuffer<'p> {
         match self {
-            Borrowed(a) => ParamBuffer::Borrowed(&a),
+            Borrowed(a) => ParamBuffer::Borrowed(a),
             Owned(a) => {
                 let mut v = Vec::new();
                 std::mem::swap(&mut v, a);
                 ParamBuffer::Owned(v)
             }
+            SingleBorrowed(a) => ParamBuffer::SingleBorrowed(a),
+            SingleOwned(a) => ParamBuffer::SingleOwned(std::mem::take(a)),
         }
     }
     pub fn param_borrow(&'p self, i: usize) -> &'p Value {
         match self {
             Borrowed(a) => &a[i],
             Owned(a) => &a[i],
+            SingleBorrowed(a) => a,
+            SingleOwned(a) => &a,
         }
     }
     pub fn param_consume(&mut self, i: usize) -> Value {
         match self {
             Borrowed(a) => a[i].clone(),
-            Owned(a) => {
-                let mut v = Value::Nothing;
-                std::mem::swap(&mut v, &mut a[i]);
-                v
-            }
+            Owned(a) => std::mem::take(&mut a[i]),
+            SingleBorrowed(a) => a.clone(),
+            SingleOwned(a) => std::mem::take(a),
         }
     }
 }

@@ -1,6 +1,6 @@
 use super::{
-    is_valid_identifier, tokenizer::Operator, FileSource, FunctionBuilder, Key, Parser, RawToken,
-    Type,
+    ast, tokenizer::Operator, FileSource, FunctionBuilder, Identifier, IdentifierType, Key,
+    MaybeType, Parser, RawToken, Tracked, Type,
 };
 use crate::env::Environment;
 use std::convert::Into;
@@ -16,7 +16,7 @@ use termion::color;
 pub struct ParseError {
     pub source_index: usize,
     pub variant: ParseFault,
-    pub source_code: Option<Vec<u8>>,
+    pub source_code: Option<String>,
     pub module_name: Option<FileSource>,
     pub parser: Option<Parser>,
 }
@@ -39,19 +39,19 @@ impl ParseError {
         self
     }
 
-    pub fn with_source_code(mut self, source: &[u8], source_name: &FileSource) -> Self {
+    pub fn with_source_code(mut self, source: String, source_name: &FileSource) -> Self {
         if self.source_code.is_some() || self.module_name.is_some() {
             return self;
         };
         self.module_name = Some(source_name.clone());
-        self.source_code = Some(source.to_vec());
+        self.source_code = Some(source);
         self
     }
     pub fn with_source_load(mut self, env: &Environment, source_name: &FileSource) -> Self {
-        let mut source = Vec::with_capacity(20);
+        let mut source = String::with_capacity(20);
         File::open(source_name.to_pathbuf(&env))
             .unwrap()
-            .read_to_end(&mut source)
+            .read_to_string(&mut source)
             .unwrap();
         self.source_code = Some(source);
         self.module_name = Some(source_name.clone());
@@ -82,17 +82,30 @@ pub enum ParseFault {
     InvalidIdentifier(String, IdentSource),
     InvalidPath(Vec<String>),
     BridgedWrongPathLen(Vec<String>),
-    BridgedFunctionNotFound(String),
+    BridgedFunctionNotFound(Identifier),
     BridgedFunctionNoMode(u8),
     Unexpected(RawToken),
+    UnexpectedWantedParameter(RawToken),
     Unmatched(Key),
     ModuleNotImported(String),
     CannotInferType(char),
-    FirstStmNoThen,
+    InvalidClosure(ast::Entity),
+    InvalidClosureT(RawToken),
     EmptyParen,
+    FirstMissingThen,
+    FirstWantedThen(RawToken),
     IfMissingElse,
     IfMissingThen,
+    IfWantedThen(RawToken),
     IfDoubleElse,
+    IfConditionNotBoolean(ast::Entity, Type),
+    IfBranchTypeMismatch(
+        Vec<Type>,
+        (
+            Vec<(Tracked<ast::Entity>, Tracked<ast::Entity>)>,
+            Tracked<ast::Entity>,
+        ),
+    ),
     ListMissingClose,
     OpNoIdent,
     OpWantedIdent(RawToken),
@@ -101,8 +114,9 @@ pub enum ParseFault {
     EmptyListType,
     ListEntryTypeMismatch(Type, Type, usize),
     FnTypeReturnMismatch(Box<FunctionBuilder>, Type),
-    FunctionNotFound(String, usize),
-    FunctionVariantNotFound(String, Vec<Type>, usize),
+    FunctionNotFound(Identifier, usize),
+    FunctionVariantNotFound(Identifier, Vec<MaybeType>, usize),
+    IdentifierNotFound(String),
     Internal,
 }
 
@@ -140,9 +154,7 @@ impl fmt::Display for ParseError {
             write!(
                 f,
                 "{g}leaf{n} {}{g}:{n}\n {y}{}{n} | {}\n{}\n",
-                module_path
-                    .to_pathbuf(&parser.environment)
-                    .to_string_lossy(),
+                module_path,
                 line_number,
                 line,
                 std::iter::repeat(' ')
@@ -159,12 +171,13 @@ impl fmt::Display for ParseError {
 
         use ParseFault::*;
         match &self.variant {
+            IdentifierNotFound(name) => write!(f, "Could not find a function, constant or parameter named `{}`", name),
             InvalidPath(entries) => write!(f, "`{}` is not a valid module path", entries.join(":")),
             BridgedWrongPathLen(entries) => write!(f, "`{}` wrong length of path", entries.join(":")),
             BridgedFunctionNotFound(ident) => write!(f, "No bridged function named `{}`", ident),
             BridgedFunctionNoMode(c) => write!(f, "Bridged path mode doesn't exist, got `{}`", c),
-            Unexpected(t) => write!(f, "Unexpected {}", t),
-            Unmatched(k) => write!(f, "Unmatched {}", k),
+            Unexpected(t) => write!(f, "Unexpected `{}`", t),
+            Unmatched(k) => write!(f, "Unmatched `{}`", k),
             CannotInferType(c) => write!(f, "Cannot infer type for `{}`", c),
             ListEntryTypeMismatch(got, wanted, entry_index) => {
                 let num = match entry_index {
@@ -175,24 +188,24 @@ impl fmt::Display for ParseError {
                     5 => "fifth".to_string(),
                     _ => entry_index.to_string().add("th"),
                 };
-                write!(f, "The {} entry of this list doesn't result in the same type as the previous ones\n Expected {}\n But got {}", num, wanted, got)
+                write!(f, "The {} entry of this list doesn't result in the same type as the previous ones\n Expected `{}`\n But got `{}`", num, wanted, got)
             },
             EndedWhileExpecting(expected) => match expected.len() {
                 0 => panic!("None expected"),
-                1 => write!(f, "I was expecting {} but the file ended here", expected[0]),
+                1 => write!(f, "I was expecting `{}` but the file ended here", expected[0]),
                 2 => write!(
                     f,
-                    "I was expecting {} or {} but the file ended here",
+                    "I was expecting `{}` or `{}` but the file ended here",
                     expected[0], expected[1]
                 ),
                 3 => write!(
                     f,
-                    "I was expecting {} or {} or {} but the file ended here",
+                    "I was expecting `{}` or `{}` or `{}` but the file ended here",
                     expected[0], expected[1], expected[2]
                 ),
                 _ => write!(
                     f,
-                    "The file ended but I was expecting any of: \n{}",
+                    "The file ended but I was expecting any of: \n`{}`",
                     expected
                         .iter()
                         .map(|t| t.to_string())
@@ -202,34 +215,34 @@ impl fmt::Display for ParseError {
             },
             GotButExpected(got, expected) => match expected.len() {
                 0 => panic!("None expected"),
-                1 => write!(f, "I was expecting {} but got {}", expected[0], got),
+                1 => write!(f, "I was expecting `{}` but got `{}`", expected[0], got),
                 2 => write!(
                     f,
-                    "I was expecting {} or {} but got {}",
+                    "I was expecting `{}` or `{}` but got {}",
                     expected[0], expected[1], got
                 ),
                 _ => write!(
                     f,
-                    "Got {} but I was expecting any of: \n{}",
+                    "Got `{}` but I was expecting any of: \n {}",
                     got,
                     expected
                         .iter()
-                        .map(|t| t.to_string())
+                        .map(|t| format!("| {}", t))
                         .collect::<Vec<String>>()
-                        .join("\n  ")
+                        .join("\n ")
                 ),
             },
             FunctionNotFound(ident, fid) => {
                 let module = &parser.modules[*fid];
                 write!(
                     f,
-                    "Function `{}` not found in {} (or prelude)",
+                    "Function `{}` not found in `{}` (or prelude)",
                     ident, module.module_path
                 )
             }
             FunctionVariantNotFound(ident, params, fid) => {
                 let module = &parser.modules[*fid];
-                let variants = &module.function_ids[ident];
+                let variants = &module.function_ids[&ident];
                 match variants.len() {
                     1 => {
                         let (wanted_params, funcid) = {
@@ -242,7 +255,11 @@ impl fmt::Display for ParseError {
                                 None => break, // TODO: What if `got` has less parmater then `wanted`?
                                 Some(t) => t,
                             };
+                            if let MaybeType::Known(got) = got {
                             if param != got {
+                                mismatches.push(i);
+                            } 
+                            } else {
                                 mismatches.push(i);
                             }
                         }
@@ -250,17 +267,17 @@ impl fmt::Display for ParseError {
                             let i = mismatches[0];
                             write!(
                                 f,
-                                "Type mismatch. Wanted `{}` but got `{}`\n {}\n {}",
+                                "Type mismatch. Wanted `{}` but got {}\n {}\n {}",
                                 wanted_params[i],
                                 params[i],
                                 format_header(ident, Some(&params), None),
-                                format_header(&wfuncb.name, Some(&wanted_params) ,None),
+                                format_header(&wfuncb.name, Some(wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()) ,None),
                             )
                         } else {
                             write!(f, "No function named `{}` takes these parameters\n  {}\n perhaps you meant to use?\n  {}",
                                 ident,
                                 format_header(ident, Some(&params), None),
-                                format_header(&wfuncb.name, Some(&wanted_params), None),
+                                format_header(&wfuncb.name, Some(&wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None),
                                 )
                         }
                     }
@@ -268,7 +285,7 @@ impl fmt::Display for ParseError {
                         write!(f, "No function named `{}` takes these parameters\n  {}\n i did however find these variants\n  {}",
                             ident,
                             format_header(ident, Some(&params), None),
-                            variants.keys().map(|params| format_header(&ident, Some(&params), None)).collect::<Vec<String>>().join("\n  ")
+                            variants.keys().map(|params| format_header(&ident, Some(params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None)).collect::<Vec<String>>().join("\n  ")
                             )
                     },
                 }
@@ -280,7 +297,7 @@ impl fmt::Display for ParseError {
             ),
             ModuleLoadFailed(path, err) => write!(
                 f,
-                "Found but unable to read {}: {:?}",
+                "Found but unable to read `{}`: {:?}",
                 path.to_string_lossy(),
                 err,
             ),
@@ -299,40 +316,70 @@ impl fmt::Display for ParseError {
                     IdentSource::Ident => Ok(()),
                 }
             },
-            FirstStmNoThen => {
+            FirstMissingThen => {
                 write!(f, "This first statement doesn't have a `then` branch. I was looking for something ressembling\n first ...\n then  ...")
             },
+            FirstWantedThen(got) => {
+                write!(f, "I was expecting an `and` or `then` branch for this `first` statement but instead I got `{}`", got)
+            }
+            InvalidClosure(got) => {
+                write!(f, "This `{}` cannot be converted into a closure", describe(&got)) 
+            }
+            InvalidClosureT(got) => {
+                write!(f, "This `{}` cannot be converted into a closure", got)
+            }
             EmptyParen => write!(f, "Empty parenthesis aren't allowed. For unit value use the type `nothing` and value `_`"),
             IfMissingThen => write!(f, "This if expression doesn't have a `then` branch, I was looking for something ressembling\n if ...\n  then ...\n  else ..."),
+            IfWantedThen(got) => write!(f, "This if expression was expecting a `then` branch but instead it got `{}`\nI was looking for something ressembling\n if ...\n  then ...\n  else ...", got),
             IfMissingElse => write!(f, "This if expression doesn't have an `else` branch, I was looking for something ressembling\n if ...\n  then ...\n  else ..."),
             IfDoubleElse => write!(f, "This if expression has two `else` branches, how would I know which one to use?"),
+            IfConditionNotBoolean(_got, gott) => write!(f, "The condition for this if branch isn't an boolean\n Wanted `bool` but got `{}`", gott),
+            IfBranchTypeMismatch(types, (branches, else_do)) => write!(f, "ERROR TODO: Properly display if statement typing.\n These branches don't return the same value\n{:?}", types),
             ListMissingClose => write!(f, "This list open is missing a matching `]` to close it"),
             OpNoIdent => write!(f, "You need to provide an identifier for this operator"),
             OpWantedIdent(a) => write!(f, "Wanted identifier for the operator but got `{}`", a),
             InvalidParameterName(name) => write!(f, "`{}` is not a valid identifier for a parmater", name),
             PipeIntoVoid => write!(f, "This pipe doesn't lead to anywhere, perhaps you need to remove it?"),
             EmptyListType => write!(f, "I know that this is a list but you need to say what type the contents of the list will be\n such as [a] or [int]"),
-            ModuleNotImported(mod_name) => write!(f, "Module {} is not imported", mod_name),
-            FnTypeReturnMismatch(funcb, got) => write!(f, "This function returns the wrong value. Acording to its type signature it should return `{}`\n  {}\nbut instead it returns `{}`",
+            UnexpectedWantedParameter(got) => write!(f, "I was expecting to see something to use as parameter but got `{}`", got),
+            ModuleNotImported(mod_name) => write!(f, "Module `{}` is not imported", mod_name),
+            FnTypeReturnMismatch(funcb, got) => {
+                let p_types = funcb.parameter_types.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>();
+                write!(f, "This function returns the wrong value. Acording to its type signature it should return `{}`\n  {}\nbut instead it returns `{}`",
                 funcb.returns,
-                format_header(&funcb.name, if funcb.parameter_types.is_empty() { None } else { Some(&funcb.parameter_types) }, Some(&funcb.returns)),
+                format_header(&funcb.name, 
+                if funcb.parameter_types.is_empty() { 
+                    None 
+                } else { 
+                    Some(p_types.as_slice()) 
+                }, 
+                Some(&funcb.returns)),
                 got,
-            ),
+            )},
             Internal => write!(f, "Internal leaf error"),
         }
     }
 }
 
-fn format_header(name: &str, params: Option<&[Type]>, returns: Option<&Type>) -> String {
-    if is_valid_identifier(name) {
-        format_function_header(name, params, returns)
-    } else {
-        let params = params.unwrap();
-        format_operator_header(name, &params[0], &params[1], returns)
+fn format_header(
+    name: &Identifier,
+    params: Option<&[MaybeType]>,
+    returns: Option<&Type>,
+) -> String {
+    match name.kind {
+        IdentifierType::Normal => format_function_header(&name.name, params, returns),
+        IdentifierType::Operator => {
+            let params = params.unwrap();
+            format_operator_header(&name.name, &params[0], &params[1], returns)
+        }
     }
 }
 
-fn format_function_header(name: &str, params: Option<&[Type]>, returns: Option<&Type>) -> String {
+fn format_function_header(
+    name: &str,
+    params: Option<&[MaybeType]>,
+    returns: Option<&Type>,
+) -> String {
     let mut buf = String::with_capacity(10);
     buf.push_str(color::Yellow.fg_str());
     buf.push_str("fn ");
@@ -361,7 +408,12 @@ fn format_function_header(name: &str, params: Option<&[Type]>, returns: Option<&
 
 // TODO: Replicate optional return/param like format_function_header
 
-fn format_operator_header(opname: &str, left: &Type, right: &Type, ret: Option<&Type>) -> String {
+fn format_operator_header(
+    opname: &str,
+    left: &MaybeType,
+    right: &MaybeType,
+    ret: Option<&Type>,
+) -> String {
     format!(
         "{}operator{} {} ({}{} {}{} -> {}{}{})",
         color::Yellow.fg_str(),
@@ -378,26 +430,27 @@ fn format_operator_header(opname: &str, left: &Type, right: &Type, ret: Option<&
     )
 }
 
-fn locate_line(source: &[u8], index: usize) -> (&[u8], usize, usize) {
+// TODO: This breaks on non-ascii utf-8 characters
+fn locate_line(source: &str, index: usize) -> (&[u8], usize, usize) {
     let mut line_number = 1;
-    for (i, c) in source.iter().enumerate() {
+    for (i, c) in source.chars().enumerate() {
         if i == index {
             break;
         }
-        if *c == b'\n' {
+        if c == '\n' {
             line_number += 1;
         }
     }
 
     // Pretty dirty hack but if the error is on the actual newline character itself we want to
     // technically search for the start of the previous line
-    let mut i = if source[index] == b'\n' {
+    let mut i = if source.as_bytes()[index] == b'\n' {
         index - 1
     } else {
         index
     };
     let start_i = loop {
-        let c = source[i];
+        let c = source.as_bytes()[i];
         if c == b'\n' || i == 0 {
             break i + 1;
         }
@@ -406,7 +459,7 @@ fn locate_line(source: &[u8], index: usize) -> (&[u8], usize, usize) {
 
     let mut i = index;
     let end_i = loop {
-        let c = match source.get(i) {
+        let c = match source.as_bytes().get(i) {
             None => break i,
             Some(c) => *c,
         };
@@ -415,5 +468,24 @@ fn locate_line(source: &[u8], index: usize) -> (&[u8], usize, usize) {
         }
         i += 1;
     };
-    (&source[start_i..end_i], index - start_i, line_number)
+    (
+        &source.as_bytes()[start_i..end_i],
+        index - start_i,
+        line_number,
+    )
+}
+
+fn describe(entity: &ast::Entity) -> &str {
+    use ast::Entity;
+    match entity {
+        Entity::Call(_, _) => "function call",
+        Entity::Pass(_) => "closure",
+        Entity::If(_, _) => "if expression",
+        Entity::First(_) => "first statement",
+        Entity::Lambda(_, _) => "lambda",
+        Entity::List(_) => "list",
+        Entity::Inlined(_) => "value",
+        Entity::SingleIdent(_) => "identifier",
+        Entity::Unimplemented => "unimplemented",
+    }
 }

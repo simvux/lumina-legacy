@@ -4,12 +4,21 @@ use crate::ir::{Capturable, Entity, First, If, Value};
 mod bridge;
 mod parambuffer;
 use parambuffer::*;
+use termion::color::{Fg, Green, Reset, Yellow};
 
 pub struct Runner<'a> {
     runtime: &'a Runtime,
     entity: &'a Entity,
     params: ParamBuffer<'a>,
-    lambda_buffer: Vec<Value>,
+}
+
+macro_rules! debug {
+    ($($arg:tt)*) => (
+        #[cfg(debug_assertions)]
+        print!(" {}runner {}->{} ", Fg(Green), Fg(Yellow), Fg(Reset));
+        #[cfg(debug_assertions)]
+        println!($($arg)*);
+    )
 }
 
 impl<'a> Runner<'a> {
@@ -18,17 +27,15 @@ impl<'a> Runner<'a> {
             runtime,
             entity: entrypoint,
             params,
-            lambda_buffer: Vec::new(),
         }
         .run()
     }
 
-    fn spawn(&self, entity: &'a Entity, params: ParamBuffer, lambda_buffer: Vec<Value>) -> Value {
+    fn spawn(&self, entity: &'a Entity, params: ParamBuffer) -> Value {
         Runner {
             runtime: self.runtime,
             entity,
             params,
-            lambda_buffer,
         }
         .run()
     }
@@ -44,68 +51,21 @@ impl<'a> Runner<'a> {
                 Entity::FirstStatement(stmt) => return self.first_statement(stmt),
                 Entity::List(list) => return self.list(list),
                 Entity::ParameterCall(paramid, params) => {
-                    let evaluated_params = match params.len() {
-                        0 => Vec::new(),
-                        1 => vec![self.spawn(
-                            &params[0],
-                            self.params.borrow(),
-                            self.lambda_buffer.clone(),
-                        )],
-                        _ => {
-                            let mut buf = Vec::with_capacity(params.len());
-                            for p in params[0..params.len() - 1].iter() {
-                                buf.push(self.spawn(
-                                    p,
-                                    self.params.borrow(),
-                                    self.lambda_buffer.clone(),
-                                ))
-                            }
-                            let new_params = self.params.borrow();
-                            buf.push(self.spawn(
-                                &params[params.len() - 1],
-                                new_params,
-                                self.lambda_buffer.clone(),
-                            ));
-                            buf
-                        }
-                    };
+                    let evaluated_params = self.eval_params(params);
                     if let Value::Function(box (entity, captured)) =
                         self.params.param_borrow(*paramid as usize)
                     {
-                        return self.spawn(entity, evaluated_params.into(), captured.clone());
+                        return self.spawn(entity, evaluated_params);
                     } else {
                         unreachable!();
                     }
                 }
                 Entity::LambdaParam(n) => {
-                    return self.lambda_buffer[*n as usize].clone();
+                    //   return self.lambda_buffer[*n as usize].clone();
+                    unimplemented!();
                 }
                 Entity::Lambda(all, to_capture) => {
                     let entries = &all[1..];
-                    let evaluated_params = match entries.len() {
-                        0 => Vec::new(),
-                        1 => {
-                            let new_params = self.params.borrow();
-                            vec![self.spawn(&entries[0], new_params, self.lambda_buffer.clone())]
-                        }
-                        _ => {
-                            let mut buf = Vec::with_capacity(entries.len());
-                            for p in entries.iter() {
-                                buf.push(self.spawn(
-                                    p,
-                                    self.params.borrow(),
-                                    self.lambda_buffer.clone(),
-                                ))
-                            }
-                            let new_params = self.params.consume();
-                            buf.push(self.spawn(
-                                &entries[entries.len() - 1],
-                                new_params,
-                                self.lambda_buffer.clone(),
-                            ));
-                            buf
-                        }
-                    };
                     let mut buf = Vec::with_capacity(to_capture.len());
                     for c in to_capture.iter() {
                         match c {
@@ -115,36 +75,12 @@ impl<'a> Runner<'a> {
                             _ => unimplemented!(),
                         }
                     }
-                    self.lambda_buffer = buf;
-                    self.params = evaluated_params.into();
+
+                    self.params = self.eval_params(entries);
                     self.entity = &all[0];
                 }
                 Entity::FunctionCall(findex, params) => {
-                    let evaluated_params = match params.len() {
-                        0 => Vec::new(),
-                        1 => {
-                            let new_params = self.params.consume();
-                            vec![self.spawn(&params[0], new_params, self.lambda_buffer.clone())]
-                        }
-                        _ => {
-                            let mut buf = Vec::with_capacity(params.len());
-                            for p in params[0..params.len() - 1].iter() {
-                                buf.push(self.spawn(
-                                    p,
-                                    self.params.borrow(),
-                                    self.lambda_buffer.clone(),
-                                ))
-                            }
-                            let new_params = self.params.consume();
-                            buf.push(self.spawn(
-                                &params[params.len() - 1],
-                                new_params,
-                                self.lambda_buffer.clone(),
-                            ));
-                            buf
-                        }
-                    };
-                    self.params = evaluated_params.into();
+                    self.params = self.eval_params(params);
                     let entity = &self.runtime.instructions[*findex as usize];
                     self.entity = entity;
                 }
@@ -156,8 +92,6 @@ impl<'a> Runner<'a> {
                                 captured.push(self.params.param_borrow(*id).clone())
                             }
                             Capturable::ParentLambda(id) => {
-                                // TODO: Not sure about this
-                                // captured.push(self.lambda_buffer[*id].clone())
                                 unreachable!()
                             }
                             Capturable::ParentWhere(_) => unimplemented!("`where <identifier>:` values cannot be captured into closures (yet)"),
@@ -171,21 +105,42 @@ impl<'a> Runner<'a> {
         }
     }
 
-    fn rust_call(mut self, index: u16, rust_params: &'a [Entity]) -> Value {
+    fn eval_params(&mut self, params: &'a [Entity]) -> ParamBuffer<'a> {
+        match params.len() {
+            0 => ParamBuffer::Owned(Vec::new()),
+            1 => {
+                let new_params = self.params.borrow();
+                ParamBuffer::SingleOwned(self.spawn(&params[0], new_params))
+            }
+            _ => {
+                let mut buf = Vec::with_capacity(params.len());
+                for p in params[0..params.len() - 1].iter() {
+                    buf.push(self.spawn(p, self.params.borrow()))
+                }
+                let new_params = self.params.borrow();
+                buf.push(self.spawn(&params[params.len() - 1], new_params));
+                ParamBuffer::from(buf)
+            }
+        }
+    }
+
+    fn rust_call(mut self, mut index: u16, rust_params: &'a [Entity]) -> Value {
         match rust_params.len() {
             2 => {
-                let func = bridge::get_func_two(index);
-
-                let a = self.spawn(
-                    &rust_params[0],
-                    self.params.borrow(),
-                    self.lambda_buffer.clone(),
-                );
+                let a = self.spawn(&rust_params[0], self.params.borrow());
 
                 self.entity = &rust_params[1];
-                let b = self.run();
+                let mut b = self.run();
 
-                func(a, b)
+                if index >= 100 {
+                    index -= 100;
+                    let func = bridge::get_func_write(index);
+                    func(&a, &mut b);
+                    b
+                } else {
+                    let func = bridge::get_func_copy(index);
+                    func(a, b)
+                }
             }
             _ => unreachable!(),
         }
@@ -193,9 +148,7 @@ impl<'a> Runner<'a> {
     fn if_expression(mut self, expr: &'a If<Entity>) -> Value {
         for i in 0..expr.branches() {
             let cond = expr.condition(i);
-            if let Value::Bool(true) =
-                self.spawn(cond, self.params.borrow(), self.lambda_buffer.clone())
-            {
+            if let Value::Bool(true) = self.spawn(cond, self.params.borrow()) {
                 self.entity = expr.evaluation(i);
                 return self.run();
             }
@@ -205,7 +158,7 @@ impl<'a> Runner<'a> {
     }
     fn first_statement(mut self, stmt: &'a First<Entity>) -> Value {
         for entity in stmt.to_void() {
-            self.spawn(entity, self.params.borrow(), self.lambda_buffer.clone());
+            self.spawn(entity, self.params.borrow());
         }
         self.entity = stmt.to_eval();
         self.run()
@@ -213,7 +166,7 @@ impl<'a> Runner<'a> {
     fn list(mut self, list: &'a [Entity]) -> Value {
         let mut buf = Vec::with_capacity(list.len());
         for entity in list[0..list.len() - 1].iter() {
-            buf.push(self.spawn(entity, self.params.borrow(), self.lambda_buffer.clone()))
+            buf.push(self.spawn(entity, self.params.borrow()))
         }
         buf.push({
             self.entity = &list[list.len() - 1];

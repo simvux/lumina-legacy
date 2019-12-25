@@ -1,6 +1,6 @@
 use crate::ir::Value;
 
-pub fn get_func_two(id: u16) -> fn(Value, Value) -> Value {
+pub fn get_func_copy(id: u16) -> fn(Value, Value) -> Value {
     match id {
         0 => |x, y| {
             if let Value::Int(x) = x {
@@ -36,4 +36,8 @@ pub fn get_func_two(id: u16) -> fn(Value, Value) -> Value {
         },
         _ => unreachable!(),
     }
+}
+
+pub fn get_func_write(id: u16) -> fn(&Value, &mut Value) {
+    unimplemented!();
 }

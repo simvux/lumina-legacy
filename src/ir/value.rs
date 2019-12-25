@@ -14,3 +14,9 @@ pub enum Value {
     // This also bloats the full Size of the Value enum, wasting even more memory
     List(Vec<Value>),
 }
+
+impl Default for Value {
+    fn default() -> Value {
+        Value::Nothing
+    }
+}

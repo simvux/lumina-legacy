@@ -1,13 +1,15 @@
+/*
 use super::IrBuilder;
-use crate::parser::{FunctionBuilder, Parser, RawToken, Token, Type};
+use crate::parser::{ast, FunctionBuilder, Identifier, Parser, Tracked, Type};
 use std::borrow::Cow;
 use std::fmt;
 use std::hash::Hash;
+use std::rc::Rc;
 
 #[derive(PartialEq, Hash, Eq, Clone)]
 pub enum FunctionSource {
     Coordinate(usize, usize),
-    Owned(usize, Box<FunctionBuilder>),
+    Owned(usize, Rc<FunctionBuilder>),
 }
 impl fmt::Debug for FunctionSource {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -30,18 +32,18 @@ impl From<(usize, usize)> for FunctionSource {
 
 impl From<(usize, FunctionBuilder)> for FunctionSource {
     fn from((fid, func): (usize, FunctionBuilder)) -> Self {
-        Self::Owned(fid, Box::new(func))
+        Self::Owned(fid, Rc::new(func))
     }
 }
 
 impl From<(usize, String, Type)> for FunctionSource {
     fn from((fid, names, types): (usize, String, Type)) -> Self {
         let func = FunctionBuilder {
-            name: String::new(),
+            name: Identifier::default(),
             parameter_names: vec![names],
             parameter_types: vec![types],
             returns: Type::Infer,
-            body: Token::default(),
+            body: Tracked::default(),
             wheres: Vec::new(),
         };
         FunctionSource::from((fid, func))
@@ -52,7 +54,7 @@ impl FunctionSource {
     pub fn returns<'a>(&'a self, parser: &'a Parser) -> &'a Type {
         &self.func(parser).returns
     }
-    pub fn body<'a>(&'a self, parser: &'a Parser) -> &'a Token {
+    pub fn body<'a>(&'a self, parser: &'a Parser) -> &'a Tracked<ast::Entity> {
         &self.func(parser).body
     }
     pub fn func<'a>(&'a self, parser: &'a Parser) -> &'a FunctionBuilder {
@@ -86,3 +88,4 @@ impl IrBuilder {
         }
     }
 }
+*/

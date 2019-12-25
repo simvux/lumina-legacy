@@ -11,20 +11,20 @@ impl From<String> for Operator {
         Self { identifier: s }
     }
 }
-impl TryFrom<&[u8]> for Operator {
+impl TryFrom<&str> for Operator {
     type Error = ();
 
-    fn try_from(s: &[u8]) -> Result<Self, Self::Error> {
-        const ALLOWED_CHARACTERS: &[u8] = b"!$%&/=?^~@+-*/;<>";
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        const ALLOWED_CHARACTERS: &str = "!$%&/=?^~@+-*/;<>";
 
-        for c in s {
-            if !ALLOWED_CHARACTERS.contains(&c) {
+        for c in s.chars() {
+            if !ALLOWED_CHARACTERS.contains(|a| a == c) {
                 return Err(());
             }
         }
 
         let valid = Self {
-            identifier: String::from_utf8(s.to_vec()).unwrap(),
+            identifier: s.to_owned(),
         };
         Ok(valid)
     }

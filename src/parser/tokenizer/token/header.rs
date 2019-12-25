@@ -9,15 +9,15 @@ pub enum Header {
     Use,
 }
 
-impl TryFrom<&[u8]> for Header {
+impl TryFrom<&str> for Header {
     type Error = ();
 
-    fn try_from(bytes: &[u8]) -> Result<Header, Self::Error> {
+    fn try_from(bytes: &str) -> Result<Header, Self::Error> {
         let res = match bytes {
-            b"fn" => Header::Function,
-            b"type" => Header::Type,
-            b"use" => Header::Use,
-            b"operator" => Header::Operator,
+            "fn" => Header::Function,
+            "type" => Header::Type,
+            "use" => Header::Use,
+            "operator" => Header::Operator,
             _ => return Err(()),
         };
         Ok(res)

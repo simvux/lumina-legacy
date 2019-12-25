@@ -29,35 +29,35 @@ pub enum Key {
     PrimitiveUnimplemented,
 }
 
-impl TryFrom<&[u8]> for Key {
+impl TryFrom<&str> for Key {
     type Error = ();
 
-    fn try_from(bytes: &[u8]) -> Result<Key, Self::Error> {
+    fn try_from(bytes: &str) -> Result<Key, Self::Error> {
         let res = match bytes {
-            b"\\" => Key::Lambda,
-            b"(" => Key::ParenOpen,
-            b")" => Key::ParenClose,
-            b"->" => Key::Arrow,
-            b"<<" => Key::Pipe,
-            b"|" => Key::Bar,
-            b"#" => Key::ClosureMarker,
-            b"[" => Key::ListOpen,
-            b"]" => Key::ListClose,
-            b"{" => Key::RecordOpen,
-            b"}" => Key::RecordClose,
-            b":" => Key::Colon,
-            b"," => Key::Comma,
-            b"match" => Key::Match,
-            b"if" => Key::If,
-            b"elif" => Key::Elif,
-            b"else" => Key::Else,
-            b"then" => Key::Then,
-            b"where" => Key::Where,
-            b"exit" => Key::PrimitiveExit,
-            b"or" => Key::Or,
-            b"and" => Key::And,
-            b"first" => Key::First,
-            b"unimplemented" => Key::PrimitiveUnimplemented,
+            "\\" => Key::Lambda,
+            "(" => Key::ParenOpen,
+            ")" => Key::ParenClose,
+            "->" => Key::Arrow,
+            "<<" => Key::Pipe,
+            "|" => Key::Bar,
+            "#" => Key::ClosureMarker,
+            "[" => Key::ListOpen,
+            "]" => Key::ListClose,
+            "{" => Key::RecordOpen,
+            "}" => Key::RecordClose,
+            ":" => Key::Colon,
+            "," => Key::Comma,
+            "match" => Key::Match,
+            "if" => Key::If,
+            "elif" => Key::Elif,
+            "else" => Key::Else,
+            "then" => Key::Then,
+            "where" => Key::Where,
+            "exit" => Key::PrimitiveExit,
+            "or" => Key::Or,
+            "and" => Key::And,
+            "first" => Key::First,
+            "???" => Key::PrimitiveUnimplemented,
             _ => return Err(()),
         };
         Ok(res)
