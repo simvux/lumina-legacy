@@ -44,7 +44,7 @@ impl Default for IdentifierType {
 }
 
 const OP_CHARS: &str = "!@#$%-+*/&?{}=;<>|";
-const NAME_CHARS: &str = "abcdefghijklmnopqrstuvwxyz123456789_-";
+pub const NAME_CHARS: &str = "abcdefghijklmnopqrstuvwxyz123456789_-";
 
 impl Identifier {
     pub fn with_annotation<I: Iterator<Item = char>>(mut self, mut iter: I) -> Result<Self, ()> {

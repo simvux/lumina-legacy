@@ -1,5 +1,5 @@
 mod token;
-use super::Tracked;
+use super::{ast, Tracked};
 use std::convert::TryFrom;
 use std::iter::Peekable;
 pub use token::{Capture, Header, Inlinable, Key, Operator, RawToken, Token};
@@ -14,6 +14,8 @@ pub struct Tokenizer<I: Iterator<Item = char>> {
 
 const DEFAULT_STOPPERS: &[char] = &[' ', ',', '(', ')', '[', ']', '\n', '#', '{', '}', '\\'];
 const SINGLES: &[char] = &['(', '[', '{', '\n', ')', ']', '}', ',', '\\', '#'];
+// TODO: Maybe the proper way to handle annotations is to make < and > singles. Although that'd
+// break operators somewhat... I think I'll just have to hack annotations in here
 
 impl<I: Iterator<Item = char>> From<Peekable<I>> for Tokenizer<I> {
     fn from(source_code: Peekable<I>) -> Self {
@@ -43,6 +45,27 @@ impl<I: Iterator<Item = char>> Tokenizer<I> {
             }
         }
     }
+    pub fn gather_to_recursive(&mut self, predicate: impl Fn(char) -> (bool, bool)) -> String {
+        let mut buf = String::new();
+        loop {
+            let c = self.source_code.peek().copied();
+            match c {
+                None => return buf,
+                Some(c) => {
+                    let r = predicate(c);
+                    if r.0 {
+                        return buf;
+                    } else if r.1 {
+                        self.walk();
+                        return self.gather_to_recursive(predicate);
+                    } else {
+                        buf.push(c);
+                        self.walk();
+                    }
+                }
+            }
+        }
+    }
 
     fn walk(&mut self) -> Option<char> {
         self.position += 1;
@@ -62,6 +85,31 @@ impl<I: Iterator<Item = char>> Tokenizer<I> {
                 return (self.walk().unwrap(), buf);
             }
             match c {
+                '<' => {
+                    // Hack to make annotations parse correctly
+                    if let Some(last) = buf.chars().rev().nth(0) {
+                        if ast::NAME_CHARS.contains(last) {
+                            self.walk();
+                            // It's an annotation to previous
+                            let complete_anot = self.gather_to_recursive(|c| match c {
+                                '<' => (false, true),
+                                '>' => (true, false),
+                                _ => (false, false),
+                            });
+                            buf.push('<');
+                            buf.push_str(&complete_anot);
+                            buf.push('>');
+                            assert_eq!(self.source_code.peek(), Some(&'>'));
+                            self.walk();
+                            return ('>', buf);
+                        }
+                    }
+                    if stoppers.contains(&c) {
+                        return (*c, buf);
+                    } else {
+                        buf.push(self.walk().unwrap());
+                    }
+                }
                 '/' => {
                     self.walk();
                     let after = self.source_code.peek();
@@ -142,13 +190,15 @@ impl<I: Iterator<Item = char>> Iterator for Tokenizer<I> {
 
 impl<I: Iterator<Item = char>> TokenSource for Tokenizer<I> {
     fn peek(&mut self) -> Option<&Token> {
+        let t = self.next()?;
+        self.pending.push(t);
+        self.pending.last()
+        /*
         if self.pending.is_empty() {
-            let t = self.next()?;
-            self.pending.push(t);
-            self.pending.last()
         } else {
             self.pending.last()
         }
+                */
     }
 }
 

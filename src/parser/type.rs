@@ -1,6 +1,7 @@
 use super::ast::{Identifier, IdentifierType};
 use super::{ParseError, ParseFault, Tokenizer};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -35,14 +36,6 @@ impl MaybeType {
             MaybeType::Known(t) => t,
         }
     }
-    /*
-    pub fn try_unwrap(&self) -> Option<&Type> {
-        match self {
-            MaybeType::Infer(t) => t.borrow().as_ref(),
-            MaybeType::Known(t) => Some(t),
-        }
-    }
-    */
 }
 impl Hash for MaybeType {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -53,7 +46,23 @@ impl Hash for MaybeType {
     }
 }
 
-impl Type {}
+impl Type {
+    pub fn decoded(self, generics: &HashMap<u8, Type>) -> Self {
+        match self {
+            Type::Generic(n) => generics[&n].clone(),
+            Type::List(box t) => Type::List(Box::new(t.decoded(generics))),
+            Type::Function(attr) => {
+                // TODO: Clone can be avoided
+                let (mut params, returns) = (attr.0, attr.1);
+                params
+                    .iter_mut()
+                    .for_each(|t| *t = t.clone().decoded(generics));
+                Type::Function(Box::new((params, returns.decoded(generics))))
+            }
+            _ => self,
+        }
+    }
+}
 
 impl std::default::Default for Type {
     fn default() -> Self {

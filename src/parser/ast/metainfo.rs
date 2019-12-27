@@ -2,6 +2,7 @@ use super::Type;
 use crate::ir::Capturable;
 use crate::parser::{Identifier, MaybeType};
 use std::collections::HashMap;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 
 #[derive(Hash, Clone, Eq, PartialEq, Debug)]
@@ -73,7 +74,10 @@ impl Meta {
                 ident.name.clone(),
                 IdentMeta {
                     use_counter: 0,
-                    r#type: known_types[i].clone(),
+                    r#type: match ident.anot.as_ref().and_then(|a| a.get(0)) {
+                        Some(t) => MaybeType::Known(t.clone()),
+                        None => known_types[i].clone(),
+                    },
                     ident: Identifiable::Param(i),
                 },
             );
@@ -84,5 +88,71 @@ impl Meta {
         let identmeta = self.identifiers.get_mut(name)?;
         identmeta.use_counter += 1;
         Some(identmeta)
+    }
+
+    /*
+    // Assumes correct match. Replaces all instances of Type::Generic(n) with param_types[i].
+    // Including return type.
+    pub fn infer_from(&mut self, generics: HashMap<u8, Type>) {
+        if let Type::Generic(n) = self.return_type {
+            self.return_type = generics[&n].clone();
+        }
+        for ident in self.identifiers.values_mut() {
+            match &mut ident.r#type {
+                MaybeType::Infer(t) => {
+                    let mut r = t.borrow_mut();
+                    match r.as_ref() {
+                        Some(Type::Generic(n)) => *r = Some(generics[&n].clone()),
+                        _ => {}
+                    }
+                }
+                MaybeType::Known(t) => match t {
+                    Type::Generic(n) => *t = generics[&n].clone(),
+                    _ => {}
+                },
+            }
+        }
+    }
+    */
+}
+
+impl fmt::Debug for Meta {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "fn {}:{} {} ({} -> {})  |{}|",
+            self.fid,
+            self.ident.name,
+            self.identifiers
+                .iter()
+                .filter_map(|(k, v)| if let Identifiable::Param(_) = v.ident {
+                    Some(k.as_str())
+                } else {
+                    None
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
+            self.identifiers
+                .values()
+                .filter_map(|v| if let Identifiable::Param(_) = v.ident {
+                    Some(v.r#type.to_string())
+                } else {
+                    None
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
+            self.return_type,
+            self.identifiers
+                .iter()
+                .filter_map(|(k, v)| {
+                    if let Identifiable::Captured(_) = v.ident {
+                        Some(k.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
     }
 }

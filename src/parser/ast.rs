@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 mod checker;
 mod entity;
-pub use entity::{Callable, Entity, Identifier, IdentifierType, Passable};
+pub use entity::{Callable, Entity, Identifier, IdentifierType, Passable, NAME_CHARS};
 mod builder;
 pub use builder::AstBuilder;
 mod metainfo;

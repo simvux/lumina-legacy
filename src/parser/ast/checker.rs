@@ -22,70 +22,35 @@ impl<'a> IrBuilder {
         name: &Identifier,
         params: &mut Vec<MaybeType>,
     ) -> Result<(Type, usize), ParseError> {
-        let (fid, funcid) = self
+        let (entry, meta) = self
             .parser
             .find_func((self_fid, name, params.as_slice()))
             .map_err(|e| e.to_err(0))?;
-        self.build_function(fid, funcid, params)
+        debug!("Trying to build {:?}", &meta);
+        self.build_function(meta, entry)
     }
 
     pub fn build_function(
         &'a self,
-        fid: usize,
-        funcid: usize,
-        params: &mut Vec<MaybeType>,
+        mut meta: Meta,
+        entry: &Tracked<ast::Entity>,
     ) -> Result<(Type, usize), ParseError> {
-        debug!(
-            "Trying to build {}({}:{}) with {:?}",
-            &self.parser.modules[fid].functions[funcid].name.name, fid, funcid, params
-        );
-        let mut meta = self.function_meta(fid, funcid);
         let findex = self.gen_id(&meta);
 
-        let func = &self.parser.modules[fid].functions[funcid];
-        let entry = &func.body;
         let (t, ir) = self.build(entry, &mut meta)?;
         let t = t.unwrap();
-        if func.returns != Type::Nothing && t != func.returns {
+        if meta.return_type != Type::Nothing && t != meta.return_type {
+            panic!("ET: Return type mismatch, {:?} {:?}", meta.return_type, t);
+            /*
             return Err(
                 ParseFault::FnTypeReturnMismatch(Box::new(func.clone()), t).to_err(entry.pos())
             );
+            */
         }
-        debug!(
-            "Successfully built {}({}:{}) -> {} with given findex {}",
-            &self.parser.modules[fid].functions[funcid].name.name, fid, funcid, t, findex
-        );
+        debug!("{:?}", &meta);
 
         self.complete(findex, ir);
         Ok((t, findex))
-    }
-
-    fn function_meta(&self, fid: usize, funcid: usize) -> Meta {
-        let func = &self.parser.modules[fid].functions[funcid];
-        let mut identifiers =
-            HashMap::with_capacity(func.parameter_names.len() + func.wheres.len());
-        for (i, param) in func.parameter_names.iter().enumerate() {
-            let identmeta = IdentMeta {
-                r#type: MaybeType::Known(func.parameter_types[i].clone()),
-                use_counter: 0,
-                ident: Identifiable::Param(i),
-            };
-            identifiers.insert(param.clone(), identmeta);
-        }
-        for (i, (name, _)) in func.wheres.iter().enumerate() {
-            let identmeta = IdentMeta {
-                r#type: MaybeType::new(),
-                use_counter: 0,
-                ident: Identifiable::Where((funcid, fid), i),
-            };
-            identifiers.insert(name.clone(), identmeta);
-        }
-        Meta {
-            fid,
-            ident: func.name.clone(),
-            identifiers,
-            return_type: func.returns.clone(),
-        }
     }
 
     fn build(
@@ -119,7 +84,6 @@ impl<'a> IrBuilder {
 
                 match call {
                     ast::Callable::Func(ident) => {
-                        // TODO: Check if `ident` is actually a parameter.
                         match meta.try_use(&ident.name) {
                             Some(identmeta) => match identmeta.ident {
                                 Identifiable::Param(id) => {
@@ -133,12 +97,14 @@ impl<'a> IrBuilder {
                                         MaybeType::Known(t) => t.clone(),
                                     };
                                     if let Type::Function(box (takes, gives)) = r#type {
-                                        // TODO: Not sure how to handle captures here, or even if i
-                                        // have to.
+                                        // TODO: I don't want this to return a Type::Generic
                                         for (i, take) in takes.iter().enumerate() {
                                             // TODO: Amount mismatches
                                             if *take != param_types[i].clone().unwrap() {
-                                                panic!("ET: Type mismatch");
+                                                panic!(
+                                                    "ET: Type mismatch, {:?} {:?}",
+                                                    *take, &param_types[i]
+                                                );
                                             }
                                         }
                                         Ok((
@@ -174,12 +140,6 @@ impl<'a> IrBuilder {
                     }
                     ast::Callable::Lambda(param_names, lambda_token) => {
                         let mut new_meta = meta.clone();
-                        /*
-                        let infered_param_types = param_types
-                            .iter()
-                            .map(|t| MaybeType::Known(t.clone()))
-                            .collect::<Vec<_>>();
-                        */
                         new_meta.lambda_swap(param_names, &param_types);
 
                         let (t, v) = self.build(lambda_token, &mut new_meta)?;
@@ -200,8 +160,24 @@ impl<'a> IrBuilder {
                 }
                 ast::Passable::Lambda(param_names, lambda_token) => {
                     let mut new_meta = meta.clone();
+                    /*
                     let mut infered_param_types = std::iter::repeat(MaybeType::new())
                         .take(param_names.len())
+                        .collect::<Vec<_>>();
+                    */
+                    let mut infered_param_types = param_names
+                        .iter()
+                        .map(|ident| {
+                            if let Some(anots) = &ident.anot {
+                                if let Some(anot) = anots.get(0) {
+                                    MaybeType::Known(anot.clone())
+                                } else {
+                                    MaybeType::new()
+                                }
+                            } else {
+                                MaybeType::new()
+                            }
+                        })
                         .collect::<Vec<_>>();
                     new_meta.lambda_swap(param_names, infered_param_types.as_slice());
 
@@ -241,13 +217,13 @@ impl<'a> IrBuilder {
                 None => {
                     // Lets see if it's a constant
                     const NO_PARAMS: &[MaybeType] = &[];
-                    let (fid, funcid) = self
+                    let (entry, meta) = self
                         .parser
                         .find_func((meta.fid, ident, NO_PARAMS))
                         .map_err(|_| {
                             ParseFault::IdentifierNotFound(ident.name.clone()).to_err(token.pos())
                         })?;
-                    let (t, findex) = self.build_function(fid, funcid, &mut Vec::new())?;
+                    let (t, findex) = self.build_function(meta, &entry)?;
                     Ok((
                         MaybeType::Known(t),
                         ir::Entity::FunctionCall(findex as u32, Vec::new()),

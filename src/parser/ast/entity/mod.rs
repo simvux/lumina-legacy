@@ -3,7 +3,7 @@ use crate::parser::tokenizer::Inlinable;
 use crate::parser::Tracked;
 use std::fmt;
 
-pub use identifier::{Identifier, IdentifierType};
+pub use identifier::{Identifier, IdentifierType, NAME_CHARS};
 
 #[derive(Clone, Debug)]
 pub enum Callable {
