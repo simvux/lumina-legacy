@@ -28,7 +28,7 @@ pub enum MaybeType {
 }
 impl MaybeType {
     pub fn new() -> Self {
-        Self::Infer(Rc::new(RefCell::new(None)))
+        Self::Infer(Rc::default())
     }
     pub fn unwrap(self) -> Type {
         match self {

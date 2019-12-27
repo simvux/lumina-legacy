@@ -1,10 +1,9 @@
 use super::IrBuilder;
 use crate::ir;
 use crate::parser::{ast, Identifier, Inlinable, MaybeType, ParseError, ParseFault, Tracked, Type};
-use std::collections::HashMap;
 use termion::color::{Fg, Green, Reset, Yellow};
 
-use super::{IdentMeta, Identifiable, Meta};
+use super::{Identifiable, Meta};
 
 macro_rules! debug {
     ($($arg:tt)*) => (

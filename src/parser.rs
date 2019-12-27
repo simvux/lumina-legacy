@@ -19,7 +19,6 @@ mod r#type;
 pub use r#type::{MaybeType, Type};
 mod ast;
 pub use ast::{Identifier, IdentifierType, IrBuilder};
-pub mod annotation;
 mod error;
 mod operator;
 pub use error::*;
