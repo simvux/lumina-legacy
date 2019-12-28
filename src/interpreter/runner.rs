@@ -1,5 +1,6 @@
 use super::runtime::Runtime;
 use crate::ir::{Capturable, Entity, First, If, Value};
+use std::collections::VecDeque;
 
 mod bridge;
 mod parambuffer;
@@ -132,13 +133,12 @@ impl<'a> Runner<'a> {
                 let a = self.spawn(&rust_params[0], self.params.borrow(), self.captured.clone());
 
                 self.entity = &rust_params[1];
-                let mut b = self.run();
+                let b = self.run();
 
                 if index >= 100 {
                     index -= 100;
                     let func = bridge::get_func_write(index);
-                    func(&a, &mut b);
-                    b
+                    func(&a, b)
                 } else {
                     let func = bridge::get_func_copy(index);
                     func(a, b)
@@ -167,14 +167,14 @@ impl<'a> Runner<'a> {
         self.run()
     }
     fn list(mut self, list: &'a [Entity]) -> Value {
-        let mut buf = Vec::with_capacity(list.len());
+        let mut buf = VecDeque::with_capacity(list.len());
         for entity in list[0..list.len() - 1].iter() {
-            buf.push(self.spawn(entity, self.params.borrow(), self.captured.clone()))
+            buf.push_back(self.spawn(entity, self.params.borrow(), self.captured.clone()))
         }
-        buf.push({
+        buf.push_back({
             self.entity = &list[list.len() - 1];
             self.run()
         });
-        Value::List(buf)
+        Value::List(Box::new(buf))
     }
 }

@@ -1,4 +1,8 @@
+use super::Runner;
 use crate::ir::Value;
+
+// We're gonna make bridged-functions instead be methods for Runner to give us more control of
+// memory.
 
 pub fn get_func_copy(id: u16) -> fn(Value, Value) -> Value {
     match id {
@@ -38,6 +42,6 @@ pub fn get_func_copy(id: u16) -> fn(Value, Value) -> Value {
     }
 }
 
-pub fn get_func_write(id: u16) -> fn(&Value, &mut Value) {
+pub fn get_func_write(id: u16) -> fn(&Value, Value) -> Value {
     unimplemented!();
 }

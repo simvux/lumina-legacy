@@ -15,6 +15,7 @@ pub fn get_funcid(ident: &str) -> Result<(u16, Type), ParseFault> {
         "sub" => (1, Type::Int),
         "mul" => (2, Type::Int),
         "div" => (3, Type::Int),
+        "map" => (100, Type::List(Box::new(Type::Generic(0)))),
         _ => {
             return Err(ParseFault::BridgedFunctionNotFound(
                 Identifier::try_from(ident).unwrap(),

@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 #[derive(Debug, Clone)]
 pub enum Value {
     Nothing,
@@ -12,7 +14,9 @@ pub enum Value {
     // For one, we're storing meta type information for each member of the list
     // rather than just once. So we're wasting a ton of space.
     // This also bloats the full Size of the Value enum, wasting even more memory
-    List(Vec<Value>),
+    //
+    // We should instead expose raw pointers to leaf and write the List decl in leaf.
+    List(Box<VecDeque<Value>>),
 }
 
 impl Default for Value {
