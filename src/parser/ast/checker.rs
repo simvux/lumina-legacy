@@ -39,12 +39,7 @@ impl<'a> IrBuilder {
         let (t, ir) = self.build(entry, &mut meta)?;
         let t = t.unwrap();
         if meta.return_type != Type::Nothing && t != meta.return_type {
-            panic!("ET: Return type mismatch, {:?} {:?}", meta.return_type, t);
-            /*
-            return Err(
-                ParseFault::FnTypeReturnMismatch(Box::new(func.clone()), t).to_err(entry.pos())
-            );
-            */
+            return Err(ParseFault::FnTypeReturnMismatch(Box::new(meta), t).to_err(entry.pos()));
         }
         debug!("{:?}", &meta);
 
@@ -96,14 +91,19 @@ impl<'a> IrBuilder {
                                         MaybeType::Known(t) => t.clone(),
                                     };
                                     if let Type::Function(box (takes, gives)) = r#type {
-                                        // TODO: I don't want this to return a Type::Generic
+                                        if takes.len() != param_types.len() {
+                                            return Err(ParseFault::ParamCallAmountMismatch(
+                                                Box::new((takes, gives, param_types)),
+                                            )
+                                            .to_err(token.pos()));
+                                        }
                                         for (i, take) in takes.iter().enumerate() {
                                             // TODO: Amount mismatches
                                             if *take != param_types[i].clone().unwrap() {
-                                                panic!(
-                                                    "ET: Type mismatch, {:?} {:?}",
-                                                    *take, &param_types[i]
-                                                );
+                                                return Err(ParseFault::ParamCallMismatch(
+                                                    Box::new((takes, gives, param_types)),
+                                                )
+                                                .to_err(token.pos()));
                                             }
                                         }
                                         Ok((
@@ -111,7 +111,11 @@ impl<'a> IrBuilder {
                                             ir::Entity::ParameterCall(id as u32, evaluated_params),
                                         ))
                                     } else {
-                                        panic!("ET: {:?} cannot take parameters", r#type);
+                                        Err(ParseFault::ParamCannotTakeParameters(Box::new((
+                                            r#type,
+                                            param_types,
+                                        )))
+                                        .to_err(token.pos()))
                                     }
                                 }
                                 _ => unimplemented!("{:?}", identmeta),
@@ -229,9 +233,7 @@ impl<'a> IrBuilder {
                     ))
                 }
             },
-            ast::Entity::Lambda(params, body) => {
-                panic!("ET: Parameterless lambda");
-            }
+            ast::Entity::Lambda(_, _) => Err(ParseFault::ParameterlessLambda.to_err(token.pos())),
         }
     }
 

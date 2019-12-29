@@ -1,6 +1,6 @@
 use super::{
-    ast, tokenizer::Operator, FileSource, FunctionBuilder, Identifier, IdentifierType, Key,
-    MaybeType, Parser, RawToken, Tracked, Type,
+    ast, ast::Identifiable, tokenizer::Operator, FileSource, FunctionBuilder, Identifier,
+    IdentifierType, Key, MaybeType, Parser, RawToken, Tracked, Type,
 };
 use crate::env::Environment;
 use std::convert::Into;
@@ -20,6 +20,9 @@ pub struct ParseError {
     pub module_name: Option<FileSource>,
     pub parser: Option<Parser>,
 }
+
+// lul. No but seriously I forgot how to properly annotate `B` for the got format
+const NO: Option<&bool> = None;
 
 impl ParseError {
     pub fn new(i: usize, err: ParseFault) -> Self {
@@ -84,6 +87,7 @@ pub enum ParseFault {
     BridgedWrongPathLen(Vec<String>),
     BridgedFunctionNotFound(Identifier),
     BridgedFunctionNoMode(u8),
+    ParameterlessLambda,
     Unexpected(RawToken),
     UnexpectedWantedParameter(RawToken),
     Unmatched(Key),
@@ -94,11 +98,14 @@ pub enum ParseFault {
     EmptyParen,
     FirstMissingThen,
     FirstWantedThen(RawToken),
+    ParamCannotTakeParameters(Box<(Type, Vec<MaybeType>)>),
     IfMissingElse,
     IfMissingThen,
     IfWantedThen(RawToken),
     IfDoubleElse,
     IfConditionNotBoolean(ast::Entity, Type),
+    ParamCallMismatch(Box<(Vec<Type>, Type, Vec<MaybeType>)>),
+    ParamCallAmountMismatch(Box<(Vec<Type>, Type, Vec<MaybeType>)>),
     IfBranchTypeMismatch(
         Vec<Type>,
         (
@@ -113,7 +120,7 @@ pub enum ParseFault {
     PipeIntoVoid,
     EmptyListType,
     ListEntryTypeMismatch(Type, Type, usize),
-    FnTypeReturnMismatch(Box<FunctionBuilder>, Type),
+    FnTypeReturnMismatch(Box<ast::Meta>, Type),
     FunctionNotFound(Identifier, usize),
     FunctionVariantNotFound(Identifier, Vec<MaybeType>, usize),
     IdentifierNotFound(String),
@@ -171,11 +178,30 @@ impl fmt::Display for ParseError {
 
         use ParseFault::*;
         match &self.variant {
+            ParameterlessLambda => write!(f, "This lambda wasn't given any parameters"),
             IdentifierNotFound(name) => write!(f, "Could not find a function, constant or parameter named `{}`", name),
             InvalidPath(entries) => write!(f, "`{}` is not a valid module path", entries.join(":")),
             BridgedWrongPathLen(entries) => write!(f, "`{}` wrong length of path", entries.join(":")),
             BridgedFunctionNotFound(ident) => write!(f, "No bridged function named `{}`", ident),
             BridgedFunctionNoMode(c) => write!(f, "Bridged path mode doesn't exist, got `{}`", c),
+            ParamCallMismatch(box (takes, _gives, got)) => {
+
+                write!(f, "The function call originating from this parameter has the wrong types of arguments\n wanted  {}\n but got {}", 
+                    format_function_parameter(Some(takes), NO),
+                    format_function_parameter(Some(got), NO),
+                    )
+            }
+            ParamCallAmountMismatch(box (takes, _gives, got)) => {
+                write!(f, "The function call originating from this parameter wanted {} argument(s) but got {}\n wanted {}\n but got {}",
+                    takes.len(),
+                    got.len(),
+                    format_function_parameter(Some(takes), NO),
+                    format_function_parameter(Some(got), NO),
+                    )
+            }
+            ParamCannotTakeParameters(box (got_t, params)) => {
+                write!(f, "This parameter of type `{}` was given these parameters\n {}\nBut {}'s cannot take parameters", got_t, format_function_parameter(Some(params), NO), got_t)
+            }
             Unexpected(t) => write!(f, "Unexpected `{}`", t),
             Unmatched(k) => write!(f, "Unmatched `{}`", k),
             CannotInferType(c) => write!(f, "Cannot infer type for `{}`", c),
@@ -263,6 +289,7 @@ impl fmt::Display for ParseError {
                                 mismatches.push(i);
                             }
                         }
+                        // TODO: Not hacking this
                         if mismatches.len() == 1 {
                             let i = mismatches[0];
                             write!(
@@ -270,7 +297,7 @@ impl fmt::Display for ParseError {
                                 "Type mismatch. Wanted `{}` but got {}\n {}\n {}",
                                 wanted_params[i],
                                 params[i],
-                                format_header(ident, Some(&params), None),
+                                format_header(ident, Some(params), None),
                                 format_header(&wfuncb.name, Some(wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()) ,None),
                             )
                         } else {
@@ -284,7 +311,7 @@ impl fmt::Display for ParseError {
                     _ => {
                         write!(f, "No function named `{}` takes these parameters\n  {}\n i did however find these variants\n  {}",
                             ident,
-                            format_header(ident, Some(&params), None),
+                            format_header(ident, Some(params.as_slice()), None),
                             variants.keys().map(|params| format_header(&ident, Some(params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None)).collect::<Vec<String>>().join("\n  ")
                             )
                     },
@@ -343,22 +370,48 @@ impl fmt::Display for ParseError {
             EmptyListType => write!(f, "I know that this is a list but you need to say what type the contents of the list will be\n such as [a] or [int]"),
             UnexpectedWantedParameter(got) => write!(f, "I was expecting to see something to use as parameter but got `{}`", got),
             ModuleNotImported(mod_name) => write!(f, "Module `{}` is not imported", mod_name),
-            FnTypeReturnMismatch(funcb, got) => {
-                let p_types = funcb.parameter_types.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>();
+            FnTypeReturnMismatch(meta, got) => {
+                let p_types = meta.identifiers.iter().filter_map(|(_name, im)| {
+                    if let Identifiable::Param(_n) = im.ident {
+                        Some(im.r#type.clone())
+                    } else { None }
+                }).collect::<Vec<MaybeType>>();
+                // let p_types = funcb.parameter_types.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>();
                 write!(f, "This function returns the wrong value. Acording to its type signature it should return `{}`\n  {}\nbut instead it returns `{}`",
-                funcb.returns,
-                format_header(&funcb.name, 
-                if funcb.parameter_types.is_empty() { 
+                meta.return_type,
+                format_header(&meta.ident,
+                if p_types.is_empty() { 
                     None 
                 } else { 
                     Some(p_types.as_slice()) 
                 }, 
-                Some(&funcb.returns)),
+                Some(&meta.return_type)),
                 got,
             )},
             Internal => write!(f, "Internal leaf error"),
         }
     }
+}
+
+fn format_function_parameter<A: fmt::Display, B: fmt::Display>(
+    params: Option<&[A]>,
+    returns: Option<&B>,
+) -> String {
+    format!(
+        "({y}{}{r} -> {y}{}{r})",
+        params
+            .map(|a| a
+                .iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>()
+                .join(" "))
+            .unwrap_or_else(|| String::from("...")),
+        returns
+            .map(|mt| mt.to_string())
+            .unwrap_or_else(|| String::from("...")),
+        y = color::Yellow.fg_str(),
+        r = color::Reset.fg_str(),
+    )
 }
 
 fn format_header(
@@ -370,63 +423,36 @@ fn format_header(
         IdentifierType::Normal => format_function_header(&name.name, params, returns),
         IdentifierType::Operator => {
             let params = params.unwrap();
-            format_operator_header(&name.name, &params[0], &params[1], returns)
+            format_operator_header(&name.name, &params, returns)
         }
     }
 }
 
-fn format_function_header(
+fn format_function_header<A: fmt::Display, B: fmt::Display>(
     name: &str,
-    params: Option<&[MaybeType]>,
-    returns: Option<&Type>,
-) -> String {
-    let mut buf = String::with_capacity(10);
-    buf.push_str(color::Yellow.fg_str());
-    buf.push_str("fn ");
-    buf.push_str(color::Reset.fg_str());
-    buf.push_str(name);
-    buf.push_str(" (");
-    if let Some(params) = params {
-        buf.push_str(color::Yellow.fg_str());
-        for param in params {
-            buf.push_str(&param.to_string());
-            buf.push(' ');
-        }
-        buf.push_str(color::Reset.fg_str());
-        buf.push_str("-> ");
-    }
-    buf.push_str(color::Yellow.fg_str());
-    match returns {
-        Some(t) => buf.push_str(&t.to_string()),
-        None => buf.push_str("..."),
-    }
-    buf.push_str(color::Reset.fg_str());
-    buf.push(')');
-
-    buf
-}
-
-// TODO: Replicate optional return/param like format_function_header
-
-fn format_operator_header(
-    opname: &str,
-    left: &MaybeType,
-    right: &MaybeType,
-    ret: Option<&Type>,
+    params: Option<&[A]>,
+    returns: Option<&B>,
 ) -> String {
     format!(
-        "{}operator{} {} ({}{} {}{} -> {}{}{})",
-        color::Yellow.fg_str(),
-        color::Reset.fg_str(),
+        "{y}fn{r} {} {}",
+        name,
+        format_function_parameter(params, returns),
+        y = color::Yellow.fg_str(),
+        r = color::Reset.fg_str()
+    )
+}
+
+fn format_operator_header<A: fmt::Display, B: fmt::Display>(
+    opname: &str,
+    params: &[A],
+    ret: Option<&B>,
+) -> String {
+    format!(
+        "{y}operator{r} {} {}",
         opname,
-        color::Green.fg_str(),
-        left,
-        right,
-        color::Reset.fg_str(),
-        color::Green.fg_str(),
-        ret.map(|t| t.to_string())
-            .unwrap_or_else(|| String::from("...")),
-        color::Reset.fg_str(),
+        format_function_parameter(Some(params), ret),
+        y = color::Yellow.fg_str(),
+        r = color::Reset.fg_str(),
     )
 }
 

@@ -356,15 +356,6 @@ impl FunctionBuilder {
     pub fn get_parameter_type(&self, pid: usize) -> &Type {
         &self.parameter_types[pid]
     }
-    pub fn check_return(&self, got: &Type) -> Result<(), ParseFault> {
-        if *got != self.returns && self.returns != Type::Nothing {
-            return Err(ParseFault::FnTypeReturnMismatch(
-                Box::new(self.clone()),
-                got.clone(),
-            ));
-        }
-        Ok(())
-    }
 }
 
 impl fmt::Debug for FunctionBuilder {

@@ -5,6 +5,9 @@ use std::fs::File;
 use std::io::Read;
 use std::rc::Rc;
 
+#[macro_use]
+extern crate smallvec;
+
 pub fn entrypoint() -> FileSource {
     FileSource::Project(vec!["main".to_owned()])
 }
@@ -72,6 +75,6 @@ fn main() {
 
     let runtime = interpreter::Runtime::new(ir);
     let entry = &runtime.instructions[entrypoint];
-    let final_value = interpreter::Runner::start(&runtime, &entry, Vec::new().into());
+    let final_value = interpreter::Runner::start(&runtime, &entry, vec![]);
     println!("{:?}", final_value);
 }

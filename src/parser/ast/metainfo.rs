@@ -89,31 +89,6 @@ impl Meta {
         identmeta.use_counter += 1;
         Some(identmeta)
     }
-
-    /*
-    // Assumes correct match. Replaces all instances of Type::Generic(n) with param_types[i].
-    // Including return type.
-    pub fn infer_from(&mut self, generics: HashMap<u8, Type>) {
-        if let Type::Generic(n) = self.return_type {
-            self.return_type = generics[&n].clone();
-        }
-        for ident in self.identifiers.values_mut() {
-            match &mut ident.r#type {
-                MaybeType::Infer(t) => {
-                    let mut r = t.borrow_mut();
-                    match r.as_ref() {
-                        Some(Type::Generic(n)) => *r = Some(generics[&n].clone()),
-                        _ => {}
-                    }
-                }
-                MaybeType::Known(t) => match t {
-                    Type::Generic(n) => *t = generics[&n].clone(),
-                    _ => {}
-                },
-            }
-        }
-    }
-    */
 }
 
 impl fmt::Debug for Meta {

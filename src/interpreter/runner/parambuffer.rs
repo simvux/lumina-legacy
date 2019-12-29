@@ -1,55 +1,74 @@
 use crate::ir::Value;
+use smallvec::SmallVec;
+use std::fmt;
+use std::ops::{Index, IndexMut};
 
-#[derive(Debug)]
 pub enum ParamBuffer<'p> {
-    Borrowed(&'p [Value]),
-    Owned(Vec<Value>),
-    SingleBorrowed(&'p Value),
-    SingleOwned(Value),
+    Borrowed(&'p SmallVec<[Value; 4]>),
+    Owned(SmallVec<[Value; 4]>),
 }
-use ParamBuffer::*;
+
+impl Default for ParamBuffer<'_> {
+    fn default() -> Self {
+        Self::Owned(SmallVec::new())
+    }
+}
 
 impl<'p> ParamBuffer<'p> {
-    pub fn borrow(&'p self) -> ParamBuffer<'p> {
+    pub fn clone_param(&self, n: usize) -> Value {
         match self {
-            Borrowed(a) => ParamBuffer::Borrowed(a),
-            Owned(a) => ParamBuffer::Borrowed(&a),
-            SingleOwned(a) => ParamBuffer::SingleBorrowed(a),
-            SingleBorrowed(a) => ParamBuffer::SingleBorrowed(a),
+            ParamBuffer::Owned(vec) => vec[n].clone(),
+            ParamBuffer::Borrowed(vec) => vec[n].clone(),
         }
     }
-    pub fn consume(&mut self) -> ParamBuffer<'p> {
+    fn as_slice(&self) -> &[Value] {
         match self {
-            Borrowed(a) => ParamBuffer::Borrowed(a),
-            Owned(a) => {
-                let mut v = Vec::new();
-                std::mem::swap(&mut v, a);
-                ParamBuffer::Owned(v)
-            }
-            SingleBorrowed(a) => ParamBuffer::SingleBorrowed(a),
-            SingleOwned(a) => ParamBuffer::SingleOwned(std::mem::take(a)),
+            Self::Borrowed(v) => v.as_slice(),
+            Self::Owned(v) => v.as_slice(),
         }
     }
-    pub fn param_borrow(&'p self, i: usize) -> &'p Value {
+}
+impl<'p> Index<usize> for ParamBuffer<'p> {
+    type Output = Value;
+
+    fn index(&self, index: usize) -> &Self::Output {
         match self {
-            Borrowed(a) => &a[i],
-            Owned(a) => &a[i],
-            SingleBorrowed(a) => a,
-            SingleOwned(a) => &a,
-        }
-    }
-    pub fn param_consume(&mut self, i: usize) -> Value {
-        match self {
-            Borrowed(a) => a[i].clone(),
-            Owned(a) => std::mem::take(&mut a[i]),
-            SingleBorrowed(a) => a.clone(),
-            SingleOwned(a) => std::mem::take(a),
+            Self::Borrowed(vec) => &vec[index],
+            Self::Owned(vec) => &vec[index],
         }
     }
 }
 
-impl From<Vec<Value>> for ParamBuffer<'_> {
-    fn from(v: Vec<Value>) -> Self {
-        Self::Owned(v)
+impl<'p> IndexMut<usize> for ParamBuffer<'p> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        match self {
+            Self::Borrowed(_) => unreachable!(),
+            Self::Owned(vec) => &mut vec[index],
+        }
+    }
+}
+
+impl<I: Iterator<Item = Value>> From<I> for ParamBuffer<'_> {
+    fn from(iter: I) -> Self {
+        let mut vec = SmallVec::new();
+        for v in iter {
+            vec.push(v);
+        }
+        Self::Owned(vec)
+    }
+}
+
+impl Clone for ParamBuffer<'_> {
+    fn clone(&self) -> Self {
+        match self {
+            ParamBuffer::Owned(vec) => ParamBuffer::Owned(vec.clone()),
+            ParamBuffer::Borrowed(vec) => ParamBuffer::Owned((*vec).to_owned()),
+        }
+    }
+}
+
+impl fmt::Debug for ParamBuffer<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.as_slice())
     }
 }
