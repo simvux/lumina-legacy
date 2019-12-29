@@ -21,6 +21,12 @@ impl<'p> ParamBuffer<'p> {
             ParamBuffer::Borrowed(vec) => vec[n].clone(),
         }
     }
+    pub fn borrow_param(&self, n: usize) -> &Value {
+        match self {
+            ParamBuffer::Owned(vec) => &vec[n],
+            ParamBuffer::Borrowed(vec) => &vec[n],
+        }
+    }
     fn as_slice(&self) -> &[Value] {
         match self {
             Self::Borrowed(v) => v.as_slice(),

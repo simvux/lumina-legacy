@@ -142,6 +142,18 @@ impl<'a> IrBuilder {
                             ir::bridge::NaiveType::ListedMatching(i) => MaybeType::Known(
                                 Type::List(Box::new(param_types[i as usize].clone().unwrap())),
                             ),
+                            ir::bridge::NaiveType::UnlistedMatching(i) => {
+                                if let MaybeType::Known(Type::List(box inner)) =
+                                    &param_types[i as usize]
+                                {
+                                    MaybeType::Known(inner.clone())
+                                } else {
+                                    panic!(
+                                        "UnlistedMatching grab wasn't a list, it was a {:?}",
+                                        &param_types[i as usize]
+                                    );
+                                }
+                            }
                         };
                         Ok((mt, ir::Entity::RustCall(id, evaluated_params)))
                     }

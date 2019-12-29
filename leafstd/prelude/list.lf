@@ -1,0 +1,7 @@
+operator <| ([a] a -> [a])
+  builtin:push_back right left
+operator |> (a [a] -> [a])
+  builtin:push_front left right
+
+fn get i list (int [a] -> a)
+  builtin:get i list
