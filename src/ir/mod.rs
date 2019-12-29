@@ -25,6 +25,17 @@ pub enum Entity {
     Unique,
 }
 
+impl PartialEq for Entity {
+    fn eq(&self, _: &Self) -> bool {
+        panic!("ET: Invalid comparison between types. This is a temporary error for when we have a more powerfull leaf type system")
+    }
+}
+impl PartialOrd for Entity {
+    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
+        panic!("ET: Invalid comparison between types. This is a temporary error for when we have a more powerfull leaf type system")
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Capturable {
     ParentParam(usize),

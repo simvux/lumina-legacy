@@ -142,6 +142,7 @@ impl<'a> ParseFault {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        dbg!(&self.variant, &self.module_name);
         let parser = self
             .parser
             .as_ref()
@@ -458,6 +459,9 @@ fn format_operator_header<A: fmt::Display, B: fmt::Display>(
 
 // TODO: This breaks on non-ascii utf-8 characters
 fn locate_line(source: &str, index: usize) -> (&[u8], usize, usize) {
+    if index >= source.len() {
+        return (b" ", 0, 1);
+    }
     let mut line_number = 1;
     for (i, c) in source.chars().enumerate() {
         if i == index {

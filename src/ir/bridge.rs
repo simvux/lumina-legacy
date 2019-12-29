@@ -26,6 +26,9 @@ pub fn get_funcid(ident: &str) -> Result<(u16, NaiveType), ParseFault> {
         "push_front" => (5, NaiveType::Matching(1)),
         "get" => (6, NaiveType::UnlistedMatching(1)),
         "len" => (7, NaiveType::Known(Type::Int)),
+        "eq" => (8, NaiveType::Known(Type::Bool)),
+        "lt" => (9, NaiveType::Known(Type::Bool)),
+        "remove" => (10, NaiveType::Matching(1)),
         _ => {
             return Err(ParseFault::BridgedFunctionNotFound(
                 Identifier::try_from(ident).unwrap(),

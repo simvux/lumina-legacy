@@ -70,4 +70,8 @@ impl IrBuilder {
             None => stack.insert(findex, entity),
         }
     }
+
+    pub fn is_completed(&self, meta: &Meta) -> bool {
+        self.assigned_indexes.borrow().get(meta).is_some()
+    }
 }

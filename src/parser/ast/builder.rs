@@ -1,6 +1,8 @@
 use super::{Callable, Entity, Passable};
 use crate::parser::tokenizer::TokenSource;
-use crate::parser::{Identifier, Key, ParseError, ParseFault, RawToken, Tokenizer, Tracked};
+use crate::parser::{
+    Identifier, IdentifierType, Key, ParseError, ParseFault, RawToken, Tokenizer, Tracked,
+};
 use std::convert::TryInto;
 
 pub struct AstBuilder<'a, I: Iterator<Item = char>> {
@@ -174,7 +176,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             Some(t) => t,
             None => return Ok(Vec::new()),
         };
-        match t.inner {
+        match &t.inner {
             RawToken::Header(_) => Ok(Vec::new()),
             RawToken::Inlined(_) => {
                 let (inlinable, pos) = assume!(RawToken::Inlined, self.tokenizer.next());
@@ -183,7 +185,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 params.insert(0, v);
                 Ok(params)
             }
-            RawToken::Identifier(_) => {
+            RawToken::Identifier(ident) => {
+                if let IdentifierType::Operator = ident.kind {
+                    return Ok(Vec::new());
+                }
                 let (ident, pos) = assume!(RawToken::Identifier, self.tokenizer.next());
                 let v = Tracked::new(Entity::SingleIdent(ident)).set(pos);
                 let mut params = self.run_parameterized()?;

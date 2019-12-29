@@ -83,9 +83,7 @@ impl<'a> Runner<'a> {
                     self.entity = &all[0];
                 }
                 Entity::FunctionCall(findex, params) => {
-                    debug!("Params before! {:?}", self.params);
                     self.params = self.eval_params(params);
-                    debug!("Params after! {:?}", self.params);
                     let entity = &self.runtime.instructions[*findex as usize];
                     self.entity = entity;
                 }

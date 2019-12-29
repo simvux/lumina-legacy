@@ -26,6 +26,11 @@ impl<'a> IrBuilder {
             .find_func((self_fid, name, params.as_slice()))
             .map_err(|e| e.to_err(0))?;
         debug!("Trying to build {:?}", &meta);
+        if self.is_completed(&meta) {
+            let findex = self.gen_id(&meta);
+            return Ok((meta.return_type.clone(), findex));
+        }
+
         self.build_function(meta, entry)
     }
 
@@ -239,7 +244,7 @@ impl<'a> IrBuilder {
                     let (entry, meta) = self
                         .parser
                         .find_func((meta.fid, ident, NO_PARAMS))
-                        .map_err(|_| {
+                        .map_err(|e| {
                             ParseFault::IdentifierNotFound(ident.name.clone()).to_err(token.pos())
                         })?;
                     let (t, findex) = self.build_function(meta, &entry)?;
@@ -263,6 +268,7 @@ impl<'a> IrBuilder {
         for (i, branch) in branches.iter().enumerate() {
             let (t, v) = self.build(branch, meta)?;
             let t = t.unwrap();
+            dbg!(&t);
             match &expected_t {
                 None => expected_t = Some(t),
                 Some(expected) => {
@@ -275,7 +281,11 @@ impl<'a> IrBuilder {
             buf.push(v);
         }
         Ok((
-            MaybeType::Known(Type::List(Box::new(expected_t.unwrap()))),
+            MaybeType::Known(
+                expected_t
+                    .map(|t| Type::List(Box::new(t)))
+                    .unwrap_or_else(|| meta.return_type.clone()),
+            ),
             ir::Entity::List(buf),
         ))
     }

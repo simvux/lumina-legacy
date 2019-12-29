@@ -144,6 +144,9 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
             let mut matches = Vec::new();
 
             'list: for (want_types, funcid) in variants.iter() {
+                if params.len() != want_types.len() {
+                    continue 'list;
+                }
                 let mut generics = HashMap::new();
                 let mut gen_amount = 0;
 
@@ -160,7 +163,7 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
         };
 
         let identifiers_from = |generics: &HashMap<_, _>, func: &FunctionBuilder| {
-            let mut identifiers = HashMap::with_capacity(func.parameter_types.len());
+            let mut identifiers = Vec::with_capacity(func.parameter_types.len());
             for (i, (n, t)) in func
                 .parameter_names
                 .iter()
@@ -173,13 +176,11 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
                     use_counter: 0,
                     ident: ast::Identifiable::Param(i),
                 };
-                identifiers.insert(n, identmeta);
+                identifiers.push((n, identmeta));
             }
             identifiers
         };
 
-        dbg!(&parser.modules[fid], &parser.modules[fid].function_ids);
-        dbg!(&ident);
         let variants = match parser.modules[fid].function_ids.get(&ident.name) {
             Some(variants) => variants,
             None => {
@@ -212,7 +213,6 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
                                 return_type: func.returns.clone().decoded(&generics),
                                 identifiers: identifiers_from(&generics, func),
                             };
-                            dbg!(&meta);
 
                             return Ok((&func.body, meta));
                         }
@@ -252,7 +252,6 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
             return_type: func.returns.clone().decoded(&generics),
             identifiers: identifiers_from(generics, func),
         };
-        dbg!(&meta);
         Ok((&func.body, meta))
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Nothing,
     Int(i64),
@@ -24,3 +24,35 @@ impl Default for Value {
         Value::Nothing
     }
 }
+/*
+
+impl PartialEq for Value {
+    // TODO: This is temporary. When we have a more powerful typesystem in leaf we'll implement
+    // this there instead.
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Value::Nothing => {
+                if let Value::Nothing = other {
+                    true
+                } else {
+                    false
+                }
+            }
+            Value::Int(x) => {
+                if let Value::Int(y) = other {
+                    x == y
+                } else {
+                    false
+                }
+            }
+            Value::Float(x) => {
+                if let Value::Float(y) = other {
+                    x == y
+                } else {
+                    false
+                }
+            }
+        }
+    }
+}
+*/

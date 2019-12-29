@@ -191,7 +191,6 @@ impl Parser {
                                 new_module_path
                             }
                         };
-                        dbg!(&file_path);
 
                         let mut source_code = String::with_capacity(20);
                         let pathbuf = file_path.to_pathbuf(&self.environment);
