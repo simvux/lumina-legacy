@@ -14,7 +14,7 @@ pub enum FileSource {
 
 pub struct ParseModule {
     //                     identifer       parameters
-    pub function_ids: HashMap<Identifier, HashMap<Vec<Type>, usize>>,
+    pub function_ids: HashMap<String, HashMap<Vec<Type>, usize>>,
     pub functions: Vec<FunctionBuilder>,
 
     pub types: HashMap<String, usize>,
@@ -92,21 +92,26 @@ impl fmt::Display for FileSource {
     }
 }
 
-impl TryFrom<(&[&str], &Environment)> for FileSource {
+impl TryFrom<(&Identifier, &Environment)> for FileSource {
     type Error = ();
 
-    fn try_from((raw, env): (&[&str], &Environment)) -> Result<FileSource, Self::Error> {
+    fn try_from((ident, env): (&Identifier, &Environment)) -> Result<FileSource, Self::Error> {
         let mut from_project_path = env.entrypoint.parent().unwrap().to_owned();
 
-        let mut file_postfix = raw.join("/");
+        let mut file_postfix = ident.path.join("/");
+        file_postfix.push('/');
+        file_postfix.push_str(&ident.name);
         file_postfix.push_str(".lf");
 
         from_project_path.push(&file_postfix);
 
         if from_project_path.exists() {
-            return Ok(FileSource::Project(
-                raw.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
-            ));
+            let mut buf = Vec::with_capacity(ident.path.len() + 1);
+            for p in ident.path.iter().cloned() {
+                buf.push(p);
+            }
+            buf.push(ident.name.clone());
+            return Ok(FileSource::Project(buf));
         }
 
         let mut from_leaf_path = env.leafpath.clone();
@@ -114,20 +119,14 @@ impl TryFrom<(&[&str], &Environment)> for FileSource {
         from_leaf_path.push(file_postfix);
 
         if from_leaf_path.exists() {
-            return Ok(FileSource::Leafpath(
-                raw.iter().map(|s| s.to_string()).collect::<Vec<String>>(),
-            ));
+            let mut buf = Vec::with_capacity(ident.path.len() + 1);
+            for p in ident.path.iter().cloned() {
+                buf.push(p);
+            }
+            buf.push(ident.name.clone());
+            return Ok(FileSource::Leafpath(buf));
         }
 
-        panic!("ET: File {:?} not found", raw);
-    }
-}
-
-impl TryFrom<(&str, &Environment)> for FileSource {
-    type Error = ();
-
-    fn try_from((raw, env): (&str, &Environment)) -> Result<FileSource, Self::Error> {
-        let spl: &[&str] = &raw.split(':').collect::<Vec<&str>>();
-        FileSource::try_from((spl, env))
+        panic!("ET: File {:?} not found", ident.name);
     }
 }

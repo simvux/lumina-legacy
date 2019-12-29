@@ -63,7 +63,7 @@ impl Parser {
     fn new_function(&mut self, fid: usize, funcb: FunctionBuilder) -> usize {
         let module = &mut self.modules[fid];
         let funcid = module.functions.len();
-        match module.function_ids.get_mut(&funcb.name) {
+        match module.function_ids.get_mut(&funcb.name.name) {
             Some(existing) => {
                 existing.insert(funcb.parameter_types.clone(), funcid);
                 module.functions.push(funcb);
@@ -73,7 +73,7 @@ impl Parser {
                 let mut hashmap = HashMap::with_capacity(1);
                 let name = funcb.name.clone();
                 hashmap.insert(funcb.parameter_types.clone(), funcid);
-                module.function_ids.insert(name, hashmap);
+                module.function_ids.insert(name.name, hashmap);
                 module.functions.push(funcb);
                 funcid
             }
@@ -167,7 +167,6 @@ impl Parser {
                     Header::Use => {
                         let ident = match tokenizer.next().map(|t| t.inner) {
                             Some(RawToken::Identifier(ident)) => ident,
-                            // Some(RawToken::ExternalIdentifier(entries, anot)) => entries,
                             None => {
                                 return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
                                     Identifier::raw("identifier"),
@@ -182,16 +181,7 @@ impl Parser {
 
                         let file_path = {
                             if module_path == crate::entrypoint() {
-                                leafmod::FileSource::try_from((
-                                    ident
-                                        .path
-                                        .iter()
-                                        .map(|s| &**s)
-                                        .collect::<Vec<&str>>()
-                                        .as_slice(),
-                                    &*self.environment,
-                                ))
-                                .unwrap()
+                                leafmod::FileSource::try_from((&ident, &*self.environment)).unwrap()
                             } else {
                                 let mut new_module_path = module_path.clone();
                                 new_module_path.pop();
@@ -201,6 +191,7 @@ impl Parser {
                                 new_module_path
                             }
                         };
+                        dbg!(&file_path);
 
                         let mut source_code = String::with_capacity(20);
                         let pathbuf = file_path.to_pathbuf(&self.environment);

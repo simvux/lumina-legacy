@@ -178,7 +178,9 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
             identifiers
         };
 
-        let variants = match parser.modules[fid].function_ids.get(ident) {
+        dbg!(&parser.modules[fid], &parser.modules[fid].function_ids);
+        dbg!(&ident);
+        let variants = match parser.modules[fid].function_ids.get(&ident.name) {
             Some(variants) => variants,
             None => {
                 // Wasn't find, so lets try prelude variants
@@ -186,7 +188,7 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
                     if let Some(variants) = parser
                         .modules
                         .get(PRELUDE_FID)
-                        .and_then(|m| m.function_ids.get(ident))
+                        .and_then(|m| m.function_ids.get(&ident.name))
                     {
                         let mut prelude_matches = find(PRELUDE_FID, variants);
                         if prelude_matches.is_empty() {
@@ -225,7 +227,7 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
             if let Some(variants) = parser
                 .modules
                 .get(PRELUDE_FID)
-                .and_then(|m| m.function_ids.get(ident))
+                .and_then(|m| m.function_ids.get(&ident.name))
             {
                 matches.append(&mut find(PRELUDE_FID, variants));
             }
