@@ -133,7 +133,7 @@ impl FunctionBuilder {
         }
     }
 
-    fn with_parameter_types<I: Iterator<Item = char>>(
+    pub fn with_parameter_types<I: Iterator<Item = char>>(
         mut self,
         tokenizer: &mut Tokenizer<I>,
     ) -> Result<Self, ParseError> {

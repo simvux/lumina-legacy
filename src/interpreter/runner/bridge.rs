@@ -1,47 +1,47 @@
 use super::Runner;
 use crate::ir::Value;
 
-// We're gonna make bridged-functions instead be methods for Runner to give us more control of
-// memory.
-
-pub fn get_func_copy(id: u16) -> fn(Value, Value) -> Value {
-    match id {
-        0 => |x, y| {
-            if let Value::Int(x) = x {
-                if let Value::Int(y) = y {
-                    return Value::Int(x + y);
-                }
+macro_rules! calc {
+    ($op:tt, $x:ident, $y:ident) => (
+        match $x {
+            Value::Int(x) => match $y {
+                Value::Int(y) => return Value::Int(x $op y),
+                _ => unreachable!(),
             }
-            unreachable!();
-        },
-        1 => |x, y| {
-            if let Value::Int(x) = x {
-                if let Value::Int(y) = y {
-                    return Value::Int(x - y);
-                }
+            Value::Float(x) => match $y {
+                Value::Float(y) => return Value::Float(x $op y),
+                _ => unreachable!(),
             }
-            unreachable!();
-        },
-        2 => |x, y| {
-            if let Value::Int(x) = x {
-                if let Value::Int(y) = y {
-                    return Value::Int(x * y);
-                }
-            }
-            unreachable!();
-        },
-        3 => |x, y| {
-            if let Value::Int(x) = x {
-                if let Value::Int(y) = y {
-                    return Value::Int(x / y);
-                }
-            }
-            unreachable!();
-        },
-        _ => unreachable!(),
-    }
+            _ => unreachable!(),
+        }
+    )
 }
 
-pub fn get_func_write(id: u16) -> fn(&Value, Value) -> Value {
-    unimplemented!();
+impl<'p> Runner<'p> {
+    pub fn eval_bridged(self, index: u16) -> Value {
+        let (x, y) = (self.params.clone_param(0), self.params.clone_param(1));
+        match index {
+            0 => calc!(+, x, y),
+            1 => calc!(-, x, y),
+            2 => calc!(*, x, y),
+            3 => calc!(/, x, y),
+            4 => {
+                if let Value::List(mut list) = y {
+                    list.push_back(x);
+                    Value::List(list)
+                } else {
+                    unreachable!();
+                }
+            }
+            5 => {
+                if let Value::List(mut list) = y {
+                    list.push_front(x);
+                    Value::List(list)
+                } else {
+                    unreachable!();
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
 }

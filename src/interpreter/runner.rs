@@ -129,25 +129,9 @@ impl<'a> Runner<'a> {
         }
     }
 
-    fn rust_call(mut self, mut index: u16, rust_params: &'a [Entity]) -> Value {
-        match rust_params.len() {
-            2 => {
-                let a = self.spawn(&rust_params[0], self.params.clone(), self.captured.clone());
-
-                self.entity = &rust_params[1];
-                let b = self.run();
-
-                if index >= 100 {
-                    index -= 100;
-                    let func = bridge::get_func_write(index);
-                    func(&a, b)
-                } else {
-                    let func = bridge::get_func_copy(index);
-                    func(a, b)
-                }
-            }
-            _ => unreachable!(),
-        }
+    fn rust_call(mut self, index: u16, rust_params: &'a [Entity]) -> Value {
+        self.params = self.eval_params(rust_params);
+        self.eval_bridged(index)
     }
     fn if_expression(mut self, expr: &'a If<Entity>) -> Value {
         for i in 0..expr.branches() {

@@ -134,12 +134,16 @@ impl<'a> IrBuilder {
                         }
                     }
                     ast::Callable::Builtin(ident) => {
-                        let (id, t) = ir::bridge::get_funcid(&ident.name)
+                        let (id, nt) = ir::bridge::get_funcid(&ident.name)
                             .map_err(|e| e.to_err(token.pos()))?;
-                        Ok((
-                            MaybeType::Known(t),
-                            ir::Entity::RustCall(id, evaluated_params),
-                        ))
+                        let mt = match nt {
+                            ir::bridge::NaiveType::Known(t) => MaybeType::Known(t),
+                            ir::bridge::NaiveType::Matching(i) => param_types[i as usize].clone(),
+                            ir::bridge::NaiveType::ListedMatching(i) => MaybeType::Known(
+                                Type::List(Box::new(param_types[i as usize].clone().unwrap())),
+                            ),
+                        };
+                        Ok((mt, ir::Entity::RustCall(id, evaluated_params)))
                     }
                     ast::Callable::Lambda(param_names, lambda_token) => {
                         let mut new_meta = meta.clone();
