@@ -142,7 +142,6 @@ impl<'a> ParseFault {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        dbg!(&self.variant, &self.module_name);
         let parser = self
             .parser
             .as_ref()
