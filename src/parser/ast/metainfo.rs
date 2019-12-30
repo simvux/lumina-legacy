@@ -1,7 +1,6 @@
 use super::Type;
 use crate::ir::Capturable;
 use crate::parser::{Identifier, MaybeType};
-use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 

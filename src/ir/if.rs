@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug, Clone)]
 pub struct If<T> {
     inner: Vec<T>,
@@ -30,5 +32,15 @@ impl<T> If<T> {
 impl<T> From<Vec<T>> for If<T> {
     fn from(v: Vec<T>) -> If<T> {
         If { inner: v }
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for If<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "(if ")?;
+        for i in 0..self.branches() {
+            write!(f, "?{} :{}", self.condition(i), self.evaluation(i))?;
+        }
+        write!(f, " else {})", self.r#else())
     }
 }

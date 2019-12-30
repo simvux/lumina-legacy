@@ -51,6 +51,7 @@ impl<'p> Runner<'p> {
                 if let Value::List(list) = self.params.borrow_param(0) {
                     Value::Int(list.len() as i64)
                 } else {
+                    dbg!(&self.params);
                     unreachable!("{:?}", self.params.borrow_param(0))
                 }
             }

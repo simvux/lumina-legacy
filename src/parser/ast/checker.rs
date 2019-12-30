@@ -184,11 +184,6 @@ impl<'a> IrBuilder {
                 }
                 ast::Passable::Lambda(param_names, lambda_token) => {
                     let mut new_meta = meta.clone();
-                    /*
-                    let mut infered_param_types = std::iter::repeat(MaybeType::new())
-                        .take(param_names.len())
-                        .collect::<Vec<_>>();
-                    */
                     let mut infered_param_types = param_names
                         .iter()
                         .map(|ident| {
@@ -268,7 +263,6 @@ impl<'a> IrBuilder {
         for (i, branch) in branches.iter().enumerate() {
             let (t, v) = self.build(branch, meta)?;
             let t = t.unwrap();
-            dbg!(&t);
             match &expected_t {
                 None => expected_t = Some(t),
                 Some(expected) => {

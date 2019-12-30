@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug, Clone)]
 pub struct First<T> {
     inner: Vec<T>,
@@ -21,5 +23,15 @@ impl<T> First<T> {
 impl<T> From<Vec<T>> for First<T> {
     fn from(v: Vec<T>) -> First<T> {
         First { inner: v }
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for First<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "void")?;
+        for v in self.to_void() {
+            writeln!(f, " ~ ({})", v)?;
+        }
+        write!(f, " : ({})", self.to_eval())
     }
 }

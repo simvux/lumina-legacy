@@ -68,7 +68,7 @@ fn main() {
     #[cfg(debug_assertions)]
     println!("Initializing runtime with entry {:?}", entrypoint);
     #[cfg(debug_assertions)]
-    println!("{:#?}", ir);
+    println!("{}\n", &ir[entrypoint]);
 
     drop(file_path);
     drop(source_code);

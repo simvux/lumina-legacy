@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
@@ -24,35 +25,26 @@ impl Default for Value {
         Value::Nothing
     }
 }
-/*
 
-impl PartialEq for Value {
-    // TODO: This is temporary. When we have a more powerful typesystem in leaf we'll implement
-    // this there instead.
-    fn eq(&self, other: &Self) -> bool {
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Value::Nothing => {
-                if let Value::Nothing = other {
-                    true
-                } else {
-                    false
+            Value::Nothing => write!(f, "_"),
+            Value::Int(n) => write!(f, "{}", n),
+            Value::Float(n) => write!(f, "{}", n),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Function(box (body, _captured)) => write!(f, "f({})", body),
+            Value::List(list) => {
+                write!(f, "[")?;
+                for (i, entity) in list.iter().enumerate() {
+                    write!(f, "{}", entity)?;
+                    if i + 1 != list.len() {
+                        write!(f, ",")?;
+                    }
                 }
-            }
-            Value::Int(x) => {
-                if let Value::Int(y) = other {
-                    x == y
-                } else {
-                    false
-                }
-            }
-            Value::Float(x) => {
-                if let Value::Float(y) = other {
-                    x == y
-                } else {
-                    false
-                }
+                write!(f, "]")?;
+                Ok(())
             }
         }
     }
 }
-*/

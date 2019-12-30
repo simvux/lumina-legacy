@@ -6,6 +6,8 @@ pub use first::First;
 mod value;
 pub use value::Value;
 
+use std::fmt;
+
 #[derive(Debug, Clone)]
 pub enum Entity {
     RustCall(u16, Vec<Entity>),
@@ -41,4 +43,82 @@ pub enum Capturable {
     ParentParam(usize),
     ParentWhere(usize),
     ParentLambda(usize),
+}
+
+impl fmt::Display for Capturable {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Capturable::ParentParam(i) => write!(f, "p{{{}}}", i),
+            Capturable::ParentLambda(i) => write!(f, "l{{{}}}", i),
+            Capturable::ParentWhere(i) => write!(f, "w{{{}}}", i),
+        }
+    }
+}
+
+impl fmt::Display for Entity {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Entity::RustCall(id, params) => {
+                write!(f, "(builtin-{}", bridge::name_from_funcid(*id))?;
+                for p in params.iter() {
+                    write!(f, " {}", p)?
+                }
+                write!(f, ")")
+            }
+            Entity::FunctionCall(findex, params) => {
+                write!(f, "(call-{}", findex)?;
+                for p in params.iter() {
+                    write!(f, " {}", p)?
+                }
+                write!(f, ")")
+            }
+            Entity::ParameterCall(i, params) => {
+                write!(f, "(pcall-{}", i)?;
+                for p in params.iter() {
+                    write!(f, " {}", p)?
+                }
+                write!(f, ")")
+            }
+            Entity::IfExpression(branches) => branches.fmt(f),
+            Entity::FirstStatement(branches) => branches.fmt(f),
+            Entity::Parameter(i) => write!(f, "p{}", i),
+            Entity::Captured(i) => write!(f, "cb{}", i),
+            Entity::Inlined(v) => write!(f, "{}", v),
+            Entity::List(list) => {
+                write!(f, "[")?;
+                if list.is_empty() {
+                    return write!(f, "]");
+                }
+                for entity in list[0..list.len() - 1].iter() {
+                    write!(f, "{},", entity)?;
+                }
+                write!(f, "{}]", list.last().unwrap())
+            }
+            Entity::Lambda(params, captures) => {
+                write!(f, "(lambda")?;
+                for p in params[1..].iter() {
+                    write!(f, " {}", p)?;
+                }
+                write!(f, " {{")?;
+                for cap in captures.iter() {
+                    write!(f, "{} ", cap)?;
+                }
+                write!(f, "}} ")?;
+                write!(f, ">>")?;
+                write!(f, " {})", params.first().unwrap())
+            }
+            Entity::LambdaPointer(box (body, captures)) => {
+                write!(f, "(lambda")?;
+                write!(f, " {{")?;
+                for cap in captures.iter() {
+                    write!(f, " {}", cap)?;
+                }
+                write!(f, "}} ")?;
+                write!(f, ">>")?;
+                write!(f, " {})", body)
+            }
+            Entity::Unimplemented => write!(f, "unimp"),
+            Entity::Unique => write!(f, "unique"),
+        }
+    }
 }

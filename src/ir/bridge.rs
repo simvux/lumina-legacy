@@ -37,3 +37,20 @@ pub fn get_funcid(ident: &str) -> Result<(u16, NaiveType), ParseFault> {
     };
     Ok(id)
 }
+
+pub fn name_from_funcid<'a>(n: u16) -> &'a str {
+    match n {
+        0 => "add",
+        1 => "sub",
+        2 => "mul",
+        3 => "div",
+        4 => "push_back",
+        5 => "push_front",
+        6 => "get",
+        7 => "len",
+        8 => "eq",
+        9 => "lt",
+        10 => "remove",
+        _ => "ERROR_UNEXISTENT_BUILTIN",
+    }
+}
