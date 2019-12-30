@@ -126,11 +126,9 @@ impl<'a> IrBuilder {
                                 _ => unimplemented!("{:?}", identmeta),
                             },
                             None => {
-                                let (t, findex) = self.find_and_build_function(
-                                    meta.fid,
-                                    ident,
-                                    &mut param_types,
-                                )?;
+                                let (t, findex) = self
+                                    .find_and_build_function(meta.fid, ident, &mut param_types)
+                                    .map_err(|e| e.fallback(token.pos()))?;
                                 Ok((
                                     MaybeType::Known(t),
                                     ir::Entity::FunctionCall(findex as u32, evaluated_params),

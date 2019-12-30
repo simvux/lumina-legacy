@@ -2,3 +2,7 @@ operator <| ([a] a -> [a])
   builtin:push_back right left
 operator |> (a [a] -> [a])
   builtin:push_front left right
+
+fn len list ([a] -> int)
+  builtin:len list
+

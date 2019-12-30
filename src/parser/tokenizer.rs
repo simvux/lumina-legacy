@@ -117,10 +117,12 @@ impl<I: Iterator<Item = char>> Tokenizer<I> {
                         Some('/') => {
                             self.walk();
                             self.single_line_comment();
+                            return self.gather_to(stoppers);
                         }
                         Some('*') => {
                             self.walk();
                             self.multi_line_comment();
+                            return self.gather_to(stoppers);
                         }
                         None => return (0 as char, buf),
                         _ => {

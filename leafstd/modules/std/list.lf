@@ -1,6 +1,3 @@
-fn len list ([a] -> int)
-  builtin:len list
-
 fn get i list (int [a] -> a)
   builtin:get i list
 
@@ -12,7 +9,7 @@ fn remove i list (int [a] -> [a])
 fn head list ([a] -> a) 
   get 0 list
 fn tail list ([a] -> a) 
-  get << len list - 1
+  get (len list - 1) list
 
 fn take n list (int [a] -> [a])
   if n < 1
@@ -22,4 +19,12 @@ fn take n list (int [a] -> [a])
 fn map f list ((a -> b) [a] -> [b]) 
   if len list == 0
     then list
-    else (f << head list) |> map #f (remove 0 list)
+    else (f << head list) |> map #f << remove 0 list
+
+fn foldr f list ((a a -> a) [a] -> a)
+  if len list == 0
+    // TODO: This should runtime error instead
+    then head list
+  elif len list == 1
+    then head list
+  else f (head list) << foldr #f << remove 0 list

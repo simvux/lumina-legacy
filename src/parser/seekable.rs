@@ -134,6 +134,7 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
                 0 => self_fid,
                 1 => {
                     let mod_name = &ident.path[0];
+                    dbg!(mod_name, &ident.name, self_fid);
                     parser.modules[self_fid].get_import(mod_name)?
                 }
                 _ => return Err(ParseFault::InvalidPath(ident.path.clone())),
@@ -255,6 +256,7 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
         Ok((&func.body, meta))
     }
 }
+/*
 impl<'a> Seekable<'a> for (usize, &str, Identifier, &[MaybeType]) {
     fn seek(
         &self,
@@ -268,6 +270,7 @@ impl<'a> Seekable<'a> for (usize, &str, Identifier, &[MaybeType]) {
         Seekable::seek(&(fid, &self.2, self.3), parser)
     }
 }
+*/
 
 impl Parser {
     pub fn find_func<'a, S: Seekable<'a> + std::fmt::Debug>(

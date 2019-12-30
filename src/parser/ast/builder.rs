@@ -37,7 +37,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             RawToken::Key(Key::ParenOpen) => {
                 let paren_pos = t.pos();
                 self.tokenizer.next();
-                let v = self.run_chunk()?;
+                let v = self.run_chunk().map_err(|e| e.fallback(paren_pos))?;
                 let after = self.tokenizer.next();
                 match after.map(|a| a.inner) {
                     Some(RawToken::Key(Key::ParenClose)) => {
@@ -177,7 +177,6 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             None => return Ok(Vec::new()),
         };
         match &t.inner {
-            RawToken::Header(_) => Ok(Vec::new()),
             RawToken::Inlined(_) => {
                 let (inlinable, pos) = assume!(RawToken::Inlined, self.tokenizer.next());
                 let v = Tracked::new(Entity::Inlined(inlinable)).set(pos);
@@ -232,8 +231,11 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 params.insert(0, Tracked::new(Entity::Pass(v)).set(pos));
                 Ok(params)
             }
-            RawToken::Key(Key::ParenClose) => Ok(Vec::new()),
-            RawToken::Key(Key::Then) => Ok(Vec::new()),
+            RawToken::Header(_)
+            | RawToken::Key(Key::ParenClose)
+            | RawToken::Key(Key::Then)
+            | RawToken::Key(Key::Else)
+            | RawToken::Key(Key::Elif) => Ok(Vec::new()),
             RawToken::NewLine => {
                 self.tokenizer.next();
                 self.run_parameterized()
