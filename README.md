@@ -172,18 +172,18 @@ The project is not yet in an usable state but we're getting there!
  - [x] Create actually runnable Leaf programs
  - [x] Implement all other primitive types (including lists)
  - [x] Build a (Rust -> Leaf) bridge
- - [/] Write a low-level standard library in Rust using the bridge
+ - [ ] Write a low-level standard library in Rust using the bridge
  - [ ] Implement conversions between the primitive types
  - [x] Add logic operations (if, elif, else)
  - [x] Swap out string identifier to vec indexes at parse-time for huge performance boosts
  - [ ] Add { a | field = } and { field = } 
  - [ ] Add match expressions (and patterns?)
  - [x] Add lambda support
- - [-] Implement function to closure conversion using '#'
+ - [ ] Implement function to closure conversion using '#'
  - [ ] Implement custom types (structs/enums)
  - [x] Design and implement generics
  - [ ] Internally design and implement implicit result handling
- - [/] Write Leaf's standard library abstracting over the Rust bridge
+ - [ ] Write Leaf's standard library abstracting over the Rust bridge
  - [ ] Add a proper CLI
  - [ ] Design and Implement multithreadding (green-threadded concurrent mapping is an idea)
  - [x] Implement stack-safe recursion
