@@ -192,3 +192,4 @@ The project is not yet in an usable state but we're getting there!
  - [x] Implement fmt::Display for our IR
  - [ ] Optimize away indirection
  - [ ] Constant evaluation optimization
+ - [ ] Strings! 
