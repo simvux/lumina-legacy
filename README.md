@@ -14,7 +14,7 @@
 
 
 ## Introduction
-Leaf's a work-in-progress programming language focused on efficiency of writing, readability, simplicity and performance.
+Leaf's a work-in-progress programming language focused on efficiency of writing, error readability, simplicity and performance.
 
 ## Full Design
 ```haskell
@@ -148,7 +148,7 @@ leaf /home/simon/C/rust/leaf/main.lf:
 This list open is missing a matching `]` to close it
 ```
 
-### Modern rust-like error handling
+### Rust-like error handling
 ```haskell
 -- The 'try' keyword causes an early return upon encountering an None or Err variant
 fn get_number_from_terminal (maybe<int>)
@@ -170,22 +170,25 @@ The project is not yet in an usable state but we're getting there!
  - [x] Design and implement the basic runner
  - [x] Implement int/string
  - [x] Create actually runnable Leaf programs
- - [x] Add a TON of assertions to improve error messages
  - [x] Implement all other primitive types (including lists)
  - [x] Build a (Rust -> Leaf) bridge
- - [ ] Write a low-level standard library in Rust using the bridge
+ - [/] Write a low-level standard library in Rust using the bridge
  - [ ] Implement conversions between the primitive types
  - [x] Add logic operations (if, elif, else)
  - [x] Swap out string identifier to vec indexes at parse-time for huge performance boosts
  - [ ] Add { a | field = } and { field = } 
- - [ ] Add logic operations (match)
- - [ ] Add lambda support
- - [ ] Implement function to closure conversion using '#'
+ - [ ] Add match expressions (and patterns?)
+ - [x] Add lambda support
+ - [-] Implement function to closure conversion using '#'
  - [ ] Implement custom types (structs/enums)
  - [x] Design and implement generics
  - [ ] Internally design and implement implicit result handling
- - [ ] Write Leaf's standard library abstracting over the Rust bridge
+ - [/] Write Leaf's standard library abstracting over the Rust bridge
  - [ ] Add a proper CLI
  - [ ] Design and Implement multithreadding (green-threadded concurrent mapping is an idea)
  - [x] Implement stack-safe recursion
  - [x] Implement function overloading
+ - [ ] Make `or` and `and` builtins instead of user-defined operators in prelude (to improve errors and break op rules)
+ - [x] Implement fmt::Display for our IR
+ - [ ] Optimize away indirection
+ - [ ] Constant evaluation optimization
