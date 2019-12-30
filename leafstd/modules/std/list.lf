@@ -28,3 +28,8 @@ fn foldr f list ((a a -> a) [a] -> a)
   elif len list == 1
     then head list
   else f (head list) << foldr #f << remove 0 list
+
+fn foldl f acc list ((a b -> b) b [a] -> b)
+  if len list == 0
+    then acc
+    else foldl #f (f (head list) acc) << remove 0 list
