@@ -23,7 +23,7 @@ macro_rules! debug {
 
 fn debug_dump_entity(entity: &Entity) {
     match entity {
-        Entity::Parameter(_) | Entity::Captured(_) | Entity::Inlined(_) => {}
+        Entity::Parameter(_) | Entity::Captured(_) | Entity::Inlined(_) | Entity::List(_) => {}
         _ => println!("{}", entity),
     }
 }

@@ -176,9 +176,15 @@ impl<'a> IrBuilder {
                 }
             }
             ast::Entity::Pass(pass) => match pass {
-                ast::Passable::Func(ident) => {
-                    unimplemented!("{:?}", token);
-                }
+                ast::Passable::Func(ident) => match meta.try_use(&ident.name) {
+                    Some(im) => match im.ident {
+                        Identifiable::Param(n) => {
+                            Ok((im.r#type.clone(), ir::Entity::Parameter(n as u16)))
+                        }
+                        _ => unimplemented!(),
+                    },
+                    None => unimplemented!(),
+                },
                 ast::Passable::PartialFunc(ident, pre_given) => {
                     unimplemented!("{:?}", token);
                 }

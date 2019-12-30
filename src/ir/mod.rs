@@ -59,7 +59,8 @@ impl fmt::Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Entity::RustCall(id, params) => {
-                write!(f, "(builtin-{}", bridge::name_from_funcid(*id))?;
+                write!(f, "(builtin-")?;
+                bridge::name_from_funcid(f, *id)?;
                 for p in params.iter() {
                     write!(f, " {}", p)?
                 }

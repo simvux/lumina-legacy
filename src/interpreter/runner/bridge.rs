@@ -66,6 +66,15 @@ impl<'p> Runner<'p> {
                 }
                 unreachable!();
             }
+            11 => {
+                if let Value::List(mut list) = self.params.clone_param(1) {
+                    if let Value::Int(i) = self.params.borrow_param(0) {
+                        list.remove(*i as usize);
+                        return Value::List(list);
+                    }
+                }
+                unreachable!();
+            }
             _ => unreachable!(),
         }
     }

@@ -1,5 +1,6 @@
 use crate::parser::{Identifier, ParseFault, Type};
 use std::convert::TryFrom;
+use std::fmt;
 
 pub fn try_rust_builtin(entries: &[String]) -> Result<Option<(u16, NaiveType)>, ParseFault> {
     if &entries[0] == "rust" {
@@ -28,7 +29,8 @@ pub fn get_funcid(ident: &str) -> Result<(u16, NaiveType), ParseFault> {
         "len" => (7, NaiveType::Known(Type::Int)),
         "eq" => (8, NaiveType::Known(Type::Bool)),
         "lt" => (9, NaiveType::Known(Type::Bool)),
-        "remove" => (10, NaiveType::Matching(1)),
+        "steal" => (10, NaiveType::Matching(1)),
+        "remove" => (11, NaiveType::Matching(1)),
         _ => {
             return Err(ParseFault::BridgedFunctionNotFound(
                 Identifier::try_from(ident).unwrap(),
@@ -38,19 +40,20 @@ pub fn get_funcid(ident: &str) -> Result<(u16, NaiveType), ParseFault> {
     Ok(id)
 }
 
-pub fn name_from_funcid<'a>(n: u16) -> &'a str {
+pub fn name_from_funcid(f: &mut fmt::Formatter, n: u16) -> fmt::Result {
     match n {
-        0 => "add",
-        1 => "sub",
-        2 => "mul",
-        3 => "div",
-        4 => "push_back",
-        5 => "push_front",
-        6 => "get",
-        7 => "len",
-        8 => "eq",
-        9 => "lt",
-        10 => "remove",
-        _ => "ERROR_UNEXISTENT_BUILTIN",
+        0 => write!(f, "add"),
+        1 => write!(f, "sub"),
+        2 => write!(f, "mul"),
+        3 => write!(f, "div"),
+        4 => write!(f, "push_back"),
+        5 => write!(f, "push_front"),
+        6 => write!(f, "get"),
+        7 => write!(f, "len"),
+        8 => write!(f, "eq"),
+        9 => write!(f, "lt"),
+        10 => write!(f, "steal"),
+        11 => write!(f, "remove"),
+        _ => write!(f, "ERROR_UNEXISTENT_BUILTIN_{}", n),
     }
 }
