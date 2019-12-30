@@ -160,7 +160,7 @@ note: The try keyword might be replaced by early returns instead being fully imp
 
 Simply run them with `./leaf <leaf-file>`. \
 If you don't want to install the leaf standard library to it's expected path you can use set the LEAFPATH environment variable, making the fully portable command `LEAFPATH=leafstd/ cargo run --release examples/<leaf-file>` \
-Remember to compile Leaf using the `--release` flag! `cargo build --release` otherwise you'll get a whole lot of debug output and greatly degraded performance. 
+Remember to compile Leaf using the `--release` flag! `cargo build --release` otherwise you'll get a whole lot of debug output and greatly degraded performance. Although if you're curious of how things work then feel free to try it without `--release` for some IR/AST output.
 
 ## Status
 
