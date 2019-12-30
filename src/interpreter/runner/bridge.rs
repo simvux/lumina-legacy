@@ -75,6 +75,10 @@ impl<'p> Runner<'p> {
                 }
                 unreachable!();
             }
+            12 => {
+                println!("{}", self.params.borrow_param(0));
+                Value::Nothing
+            }
             _ => unreachable!(),
         }
     }

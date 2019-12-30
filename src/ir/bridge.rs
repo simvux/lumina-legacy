@@ -31,6 +31,7 @@ pub fn get_funcid(ident: &str) -> Result<(u16, NaiveType), ParseFault> {
         "lt" => (9, NaiveType::Known(Type::Bool)),
         "steal" => (10, NaiveType::Matching(1)),
         "remove" => (11, NaiveType::Matching(1)),
+        "print_any" => (12, NaiveType::Known(Type::Nothing)),
         _ => {
             return Err(ParseFault::BridgedFunctionNotFound(
                 Identifier::try_from(ident).unwrap(),
@@ -54,6 +55,7 @@ pub fn name_from_funcid(f: &mut fmt::Formatter, n: u16) -> fmt::Result {
         9 => write!(f, "lt"),
         10 => write!(f, "steal"),
         11 => write!(f, "remove"),
+        12 => write!(f, "print_any"),
         _ => write!(f, "ERROR_UNEXISTENT_BUILTIN_{}", n),
     }
 }

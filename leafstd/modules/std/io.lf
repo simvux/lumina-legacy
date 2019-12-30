@@ -1,0 +1,2 @@
+fn puts v (a -> nothing)
+  builtin:print_any v

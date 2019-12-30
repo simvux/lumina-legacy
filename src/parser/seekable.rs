@@ -134,7 +134,6 @@ impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
                 0 => self_fid,
                 1 => {
                     let mod_name = &ident.path[0];
-                    dbg!(mod_name, &ident.name, self_fid);
                     parser.modules[self_fid].get_import(mod_name)?
                 }
                 _ => return Err(ParseFault::InvalidPath(ident.path.clone())),

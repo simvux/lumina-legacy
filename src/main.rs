@@ -75,6 +75,5 @@ fn main() {
 
     let runtime = interpreter::Runtime::new(ir);
     let entry = &runtime.instructions[entrypoint];
-    let final_value = interpreter::Runner::start(&runtime, &entry, vec![]);
-    println!("{:?}", final_value);
+    let _final_value = interpreter::Runner::start(&runtime, &entry, vec![]);
 }
