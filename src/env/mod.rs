@@ -1,11 +1,15 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+mod output;
+use output::Output;
+mod flags;
+
 #[derive(Debug)]
 pub struct Environment {
     pub leafpath: PathBuf,
     pub entrypoint: PathBuf,
-    // TODO: flags and stuff
+    pub output: Output,
 }
 
 impl Environment {
@@ -19,6 +23,7 @@ impl Environment {
                         .unwrap_or_else(|_| panic!("Could not find leafpath"))
                         .to_owned()
                 }),
+            output: Output::default(),
         }
     }
 
@@ -27,7 +32,8 @@ impl Environment {
         if args.len() < 2 {
             Err("you need to provide a filename")
         } else {
-            let mut path = Path::new(&env::args().last().unwrap()).to_owned();
+            let mut args = env::args().collect::<Vec<String>>();
+            let mut path = PathBuf::from(args.pop().unwrap());
             if path.is_relative() {
                 let current_dir = env::current_dir().expect("Could not get active directory");
                 path = current_dir.join(path);
@@ -35,7 +41,12 @@ impl Environment {
             if !path.exists() {
                 return Err("file does not exist");
             }
-            Ok(Environment::from(path))
+            let mut env = Environment::from(path);
+
+            // Skipping first since that's binary path
+            env.parse_flags(args.drain(1..));
+
+            Ok(env)
         }
     }
 }

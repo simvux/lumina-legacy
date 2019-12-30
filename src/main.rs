@@ -20,6 +20,8 @@ use parser::{FileSource, IrBuilder};
 mod interpreter;
 pub mod ir;
 
+pub const VERSION: &str = "alpha-1.0";
+
 fn main() {
     let environment = match Environment::discover() {
         Ok(env) => Rc::new(env),
@@ -28,6 +30,11 @@ fn main() {
             return;
         }
     };
+    if environment.output.help {
+        environment.help_message();
+        return;
+    }
+
     let mut parser = Parser::new(environment.clone());
     if let Err(e) = parser.read_prelude_source() {
         println!("{}", e.with_parser(parser));
@@ -53,22 +60,25 @@ fn main() {
             return;
         }
     };
-    #[cfg(debug_assertions)]
-    println!("{:#?}", parser);
+    if environment.output.ast {
+        println!("{:#?}", &parser.modules[fid]);
+    }
 
     // Verify syntax, infer types and compile to low-level IR.
     let (ir, entrypoint) =
-        match IrBuilder::new(parser, environment).start_type_checker(fid, "main", &[]) {
+        match IrBuilder::new(parser, environment.clone()).start_type_checker(fid, "main", &[]) {
             Err(e) => {
                 println!("{}", e.with_source_code(source_code, &file_path));
                 return;
             }
             Ok(ir) => ir,
         };
-    #[cfg(debug_assertions)]
-    println!("Initializing runtime with entry {:?}", entrypoint);
-    #[cfg(debug_assertions)]
-    println!("{}\n", &ir[entrypoint]);
+
+    if environment.output.ir {
+        for entity in ir.iter() {
+            println!("{}", entity);
+        }
+    }
 
     drop(file_path);
     drop(source_code);
