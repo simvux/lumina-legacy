@@ -1,0 +1,6 @@
+use std:io
+
+fn main
+  io:puts
+    << first io:puts 20 // This expression runs without returning a value
+       then  20 + 20    // This expression runs and returns a value

@@ -8,5 +8,5 @@ fn magic_number (int) 20
 fn main
    io:puts << 
      if magic_number == add 10 10
-       then "The numbers are equal"
-       else "The numbers are not equal"
+       then 1
+       else 0

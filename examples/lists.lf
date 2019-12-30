@@ -1,0 +1,8 @@
+use std:list
+use std:io
+
+fn sum list ([int] -> int)
+  list:foldr #(\n p -> n + p) list
+
+fn main
+  io:puts << sum << list:map #(\n -> n + 1) [1,2,3]
