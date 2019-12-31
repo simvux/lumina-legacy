@@ -4,6 +4,8 @@ use std::convert::TryFrom;
 use std::iter::Peekable;
 pub use token::{Capture, Header, Inlinable, Key, Operator, RawToken, Token};
 
+// The Tokenizer streams raw input data into RawToken's, which are then streamed directly into
+// ast::Entity's by our parser.
 pub struct Tokenizer<I: Iterator<Item = char>> {
     source_code: Peekable<I>,
     pub position: usize,
@@ -13,9 +15,8 @@ pub struct Tokenizer<I: Iterator<Item = char>> {
 }
 
 const DEFAULT_STOPPERS: &[char] = &[' ', ',', '(', ')', '[', ']', '\n', '#', '{', '}', '\\'];
+// Sometimes we want to break early on characters even if there wasn't a space before them.
 const SINGLES: &[char] = &['(', '[', '{', '\n', ')', ']', '}', ',', '\\', '#'];
-// TODO: Maybe the proper way to handle annotations is to make < and > singles. Although that'd
-// break operators somewhat... I think I'll just have to hack annotations in here
 
 impl<I: Iterator<Item = char>> From<Peekable<I>> for Tokenizer<I> {
     fn from(source_code: Peekable<I>) -> Self {
@@ -195,12 +196,6 @@ impl<I: Iterator<Item = char>> TokenSource for Tokenizer<I> {
         let t = self.next()?;
         self.pending.push(t);
         self.pending.last()
-        /*
-        if self.pending.is_empty() {
-        } else {
-            self.pending.last()
-        }
-                */
     }
 }
 

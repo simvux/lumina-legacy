@@ -3,11 +3,19 @@ use super::{
 };
 use std::collections::HashMap;
 
+// Seekable is how we find which function to used when we cannot locally resolve an identifier.
+// We don't actually return the discovered function itself, but rather it's entrypoint combined
+// with the Meta object which contains some of the metadata of a function but with all generics
+// replaced, infered by the given parameter types.
+//
+// There can be multiple functions viable for the same input meta, but the one with the least
+// generics is always selected.
 pub trait Seekable<'a> {
     fn seek(&self, parser: &'a Parser)
         -> Result<(&'a Tracked<ast::Entity>, ast::Meta), ParseFault>;
 }
 
+// See if two types match up, taking inferation and generics into count
 fn deep_cmp(
     generics: &mut HashMap<u8, Type>,
     gen_amount: &mut usize,

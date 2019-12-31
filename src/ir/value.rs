@@ -8,7 +8,6 @@ pub enum Value {
     Float(f64),
     Bool(bool),
     // I want *actually* captured here, not to be captured.
-    // TODO: Lazy clone
     Function(Box<(super::Entity, Vec<Value>)>),
 
     // TODO: This is a terrible way to handle lists.
@@ -17,6 +16,10 @@ pub enum Value {
     // This also bloats the full Size of the Value enum, wasting even more memory
     //
     // We should instead expose raw pointers to leaf and write the List decl in leaf.
+    //
+    // Issues caused by handling this in leaf would be that it breaks our current
+    // move/borrow/replace memory system in the runner. Although I suppose implementing
+    // the clone/drop/whatever traits manually can fix that somewhat. We'll see
     List(Box<VecDeque<Value>>),
 }
 

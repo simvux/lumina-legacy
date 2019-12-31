@@ -10,6 +10,12 @@ pub fn try_rust_builtin(entries: &[String]) -> Result<Option<(u16, NaiveType)>, 
     }
 }
 
+// This is used to determine the return type of the builtins in the checker
+// Matching: the return type is the same as a previous parameter
+// ListedMatching: The return type is the same as a previous parameter but wrapped in list
+// UnlistedMatching: The return type is the same as the inner value of a previous list parameter
+//
+// Most of the builtin functions are generic. Which is why this is required.
 pub enum NaiveType {
     Known(Type),
     Matching(u16),

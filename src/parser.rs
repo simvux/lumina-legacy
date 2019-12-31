@@ -88,6 +88,8 @@ impl Parser {
         typeid
     }
 
+    // Use leafpath and relative entrypoint path to find all `prelude` folders, and include those
+    // in our global scope.
     pub fn read_prelude_source(&mut self) -> Result<(), ParseError> {
         // get the leafpath root directory
         let leafpath = &self.environment.leafpath;
@@ -107,7 +109,6 @@ impl Parser {
         }
         Ok(())
     }
-
     fn tokenize_prelude(&mut self, path: &Path) -> Result<(), ParseError> {
         for entry in path.read_dir().expect("Couldn't read prelude directory.") {
             let file_path = entry.expect("Prelude file path doesn't exist.").path();
@@ -125,7 +126,7 @@ impl Parser {
         Ok(())
     }
 
-    // We only have to return Functions because custom types only need to be indexed
+    // Turn a specified file into AST and load it into parser
     pub fn tokenize<I: Iterator<Item = char>>(
         &mut self,
         module_path: FileSource,
@@ -179,6 +180,7 @@ impl Parser {
                             }
                         };
 
+                        // We search for filepath both from $LEAFPATH and relatively from entrypoint
                         let file_path = {
                             if module_path == crate::entrypoint() {
                                 leafmod::FileSource::try_from((&ident, &*self.environment)).unwrap()
@@ -192,8 +194,8 @@ impl Parser {
                             }
                         };
 
-                        let mut source_code = String::with_capacity(20);
                         let pathbuf = file_path.to_pathbuf(&self.environment);
+                        let mut source_code = String::with_capacity(20);
                         File::open(pathbuf.clone())
                             .map_err(|e| {
                                 ParseFault::ModuleLoadFailed(pathbuf.clone(), e.kind())
@@ -204,15 +206,20 @@ impl Parser {
                                 ParseFault::ModuleLoadFailed(pathbuf, e.kind()).to_err(source_index)
                             })?;
 
+                        // Fork and tokenize this module first instead.
                         let usefid = match self.tokenize(file_path.clone(), source_code.chars()) {
                             Err(e) => return Err(e.with_source_code(source_code, &file_path)),
                             Ok(fid) => fid,
                         };
+                        // `usefid` is the ID which was assigned,
+                        // it's already been inserted as a module in the parser
+                        // but we need to add it to *this* modules imports.
                         self.modules[fid].imports.insert(ident.name, usefid);
                     }
                 },
                 RawToken::NewLine => continue,
                 _ => {
+                    // We only want top-level headers here
                     return ParseError::new(
                         source_index,
                         ParseFault::GotButExpected(
@@ -224,7 +231,7 @@ impl Parser {
                             ],
                         ),
                     )
-                    .into()
+                    .into();
                 }
             }
         }

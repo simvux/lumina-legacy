@@ -5,6 +5,7 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::path::PathBuf;
 
+// Files can be loaded either from relative path or leafpath
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum FileSource {
     Project(Vec<String>),
@@ -12,6 +13,7 @@ pub enum FileSource {
     Prelude,
 }
 
+// An entire leaf module, which represents one singular .lf file.
 pub struct ParseModule {
     //                     identifer       parameters
     pub function_ids: HashMap<String, HashMap<Vec<Type>, usize>>,

@@ -9,6 +9,8 @@ use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
 
+// FunctionBuilder represents the AST-stage of a function or operator
+// (operators are turned into functions)
 #[derive(Default, Clone)]
 pub struct FunctionBuilder {
     pub name: Identifier,
@@ -27,6 +29,9 @@ impl PartialEq for FunctionBuilder {
     }
 }
 impl Eq for FunctionBuilder {}
+
+// The same function can be either *already built* or *pending to be built*.
+// therefore we cannot rely on the body/wheres when hashing.
 impl Hash for FunctionBuilder {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);

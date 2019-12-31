@@ -2,6 +2,8 @@ use super::{
     ast::IdentifierType, FunctionBuilder, Key, ParseError, ParseFault, RawToken, Tokenizer,
 };
 
+// Operator reuses most of the function-construction methods
+
 impl FunctionBuilder {
     pub fn with_header_operator<I: Iterator<Item = char>>(
         mut self,
