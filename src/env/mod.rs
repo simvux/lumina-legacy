@@ -10,6 +10,7 @@ pub struct Environment {
     pub leafpath: PathBuf,
     pub entrypoint: PathBuf,
     pub output: Output,
+    pub optimize: bool,
 }
 
 impl Environment {
@@ -23,6 +24,7 @@ impl Environment {
                         .unwrap_or_else(|_| panic!("Could not find leafpath"))
                         .to_owned()
                 }),
+            optimize: true,
             output: Output::default(),
         }
     }

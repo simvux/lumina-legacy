@@ -74,16 +74,20 @@ fn main() {
             Ok(ir) => ir,
         };
 
+    drop(file_path);
+    drop(source_code);
+
+    let mut runtime = interpreter::Runtime::new(ir);
+    if environment.optimize {
+        runtime.optimize();
+    }
+
     if environment.output.ir {
-        for entity in ir.iter() {
+        for entity in runtime.instructions.iter() {
             println!("{}", entity);
         }
     }
 
-    drop(file_path);
-    drop(source_code);
-
-    let runtime = interpreter::Runtime::new(ir);
     let entry = &runtime.instructions[entrypoint];
     let _final_value = interpreter::Runner::start(&runtime, &entry, vec![]);
 }

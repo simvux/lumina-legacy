@@ -24,6 +24,11 @@ const ARGS: &[(&[&str], &str, fn(&mut Environment))] = &[
             env.output.ast = true;
         },
     ),
+    (
+        &["--no-optimize"],
+        "turn of optimizations such as function inlining",
+        |env| env.optimize = false,
+    ),
 ];
 
 impl Environment {

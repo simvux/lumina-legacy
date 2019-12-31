@@ -1,10 +1,12 @@
 use super::IrBuilder;
 use crate::ir;
 use crate::parser::{ast, Identifier, Inlinable, MaybeType, ParseError, ParseFault, Tracked, Type};
-use termion::color::{Fg, Green, Reset, Yellow};
 
 use super::{Identifiable, Meta};
 
+#[allow(unused_imports)]
+use termion::color::{Fg, Green, Reset, Yellow};
+#[allow(unused)]
 macro_rules! debug {
     ($($arg:tt)*) => (
         #[cfg(debug_assertions)]
@@ -25,7 +27,6 @@ impl<'a> IrBuilder {
             .parser
             .find_func((self_fid, name, params.as_slice()))
             .map_err(|e| e.to_err(0))?;
-        debug!("Trying to build {:?}", &meta);
         if self.is_completed(&meta) {
             let findex = self.gen_id(&meta);
             return Ok((meta.return_type.clone(), findex));
@@ -46,7 +47,6 @@ impl<'a> IrBuilder {
         if meta.return_type != Type::Nothing && t != meta.return_type {
             return Err(ParseFault::FnTypeReturnMismatch(Box::new(meta), t).to_err(entry.pos()));
         }
-        debug!("{:?}", &meta);
 
         self.complete(findex, ir);
         Ok((t, findex))

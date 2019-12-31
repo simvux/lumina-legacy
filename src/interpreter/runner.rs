@@ -17,6 +17,8 @@ pub struct Runner<'a> {
 macro_rules! debug {
     ($($arg:tt)*) => (
         #[cfg(debug_assertions)]
+        print!(" runner -> ")
+        #[cfg(debug_assertions)]
         println!($($arg)*);
     )
 }
@@ -51,6 +53,7 @@ impl<'a> Runner<'a> {
 
     fn run(mut self) -> Value {
         loop {
+            debug!("{}", &self.entity);
             match self.entity {
                 Entity::RustCall(index, params) => return self.rust_call(*index, params),
                 Entity::Parameter(n) => return self.params.clone_param(*n as usize),

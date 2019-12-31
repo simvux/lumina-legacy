@@ -27,6 +27,25 @@ pub enum Entity {
     Unique,
 }
 
+impl Entity {
+    pub fn non_forking(&self) -> bool {
+        match self {
+            Entity::Inlined(_) => true,
+            Entity::Captured(_) => true,
+            Entity::Parameter(_) => true,
+            Entity::List(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn inline_param(self, parent_params: &[Entity]) -> Self {
+        match self {
+            Self::Parameter(n) => parent_params[n as usize].clone(),
+            _ => self,
+        }
+    }
+}
+
 impl PartialEq for Entity {
     fn eq(&self, _: &Self) -> bool {
         panic!("ET: Invalid comparison between types. This is a temporary error for when we have a more powerfull leaf type system")
