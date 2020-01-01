@@ -37,7 +37,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             RawToken::Key(Key::ParenOpen) => {
                 let paren_pos = t.pos();
                 self.tokenizer.next();
-                let v = self.run_chunk().map_err(|e| e.fallback(paren_pos))?;
+                let v = self.run_chunk().map_err(|e| e.fallback_index(paren_pos))?;
                 let after = self.tokenizer.next();
                 match after.map(|a| a.inner) {
                     Some(RawToken::Key(Key::ParenClose)) => {
@@ -68,19 +68,23 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             RawToken::Key(Key::ListOpen) => {
                 let pos = t.pos();
                 self.tokenizer.next();
-                let v = self.run_list().map_err(|e| e.fallback(pos))?;
+                let v = self.run_list().map_err(|e| e.fallback_index(pos))?;
                 self.run_maybe_operator(Tracked::new(v).set(pos))
             }
             RawToken::Key(Key::If) => {
                 let pos = t.pos();
                 self.tokenizer.next();
-                let v = self.run_if_expression().map_err(|e| e.fallback(pos))?;
+                let v = self
+                    .run_if_expression()
+                    .map_err(|e| e.fallback_index(pos))?;
                 self.run_maybe_operator(Tracked::new(v).set(pos))
             }
             RawToken::Key(Key::First) => {
                 let pos = t.pos();
                 self.tokenizer.next();
-                let v = self.run_first_statement().map_err(|e| e.fallback(pos))?;
+                let v = self
+                    .run_first_statement()
+                    .map_err(|e| e.fallback_index(pos))?;
                 self.run_maybe_operator(Tracked::new(v).set(pos))
             }
             RawToken::Identifier(_) => {
@@ -93,13 +97,13 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 };
                 let v = self
                     .run_maybe_parameterized(Tracked::new(callable).set(pos))
-                    .map_err(|e| e.fallback(pos))?;
+                    .map_err(|e| e.fallback_index(pos))?;
                 self.run_maybe_operator(v)
             }
             RawToken::Key(Key::Lambda) => {
                 let pos = t.pos();
                 self.tokenizer.next();
-                let v = self.run_lambda().map_err(|e| e.fallback(pos))?;
+                let v = self.run_lambda().map_err(|e| e.fallback_index(pos))?;
 
                 if self.lambda_should_consume_pipe() {
                     self.tokenizer.next();

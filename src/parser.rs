@@ -120,7 +120,7 @@ impl Parser {
                     .unwrap();
 
                 self.tokenize(FileSource::Prelude, source_code_buffer.chars())
-                    .map_err(|e| e.with_source_code(source_code_buffer, &FileSource::Prelude))?;
+                    .map_err(|e| e.fallback_fid(PRELUDE_FID))?;
             }
         }
         Ok(())
@@ -147,7 +147,7 @@ impl Parser {
                         let mut funcb = FunctionBuilder::new().with_header(&mut tokenizer)?;
                         funcb
                             .parse_body(&mut tokenizer)
-                            .map_err(|e| e.fallback(source_index))?;
+                            .map_err(|e| e.fallback_index(source_index).fallback_fid(fid))?;
 
                         self.new_function(fid, funcb);
                     }
@@ -156,7 +156,7 @@ impl Parser {
                             FunctionBuilder::new().with_header_operator(&mut tokenizer)?;
                         funcb
                             .parse_body(&mut tokenizer)
-                            .map_err(|e| e.fallback(source_index))?;
+                            .map_err(|e| e.fallback_index(source_index).fallback_fid(fid))?;
 
                         self.new_function(fid, funcb);
                     }
@@ -208,7 +208,7 @@ impl Parser {
 
                         // Fork and tokenize this module first instead.
                         let usefid = match self.tokenize(file_path.clone(), source_code.chars()) {
-                            Err(e) => return Err(e.with_source_code(source_code, &file_path)),
+                            Err(e) => return Err(e.fallback_fid(fid).fallback_index(source_index)),
                             Ok(fid) => fid,
                         };
                         // `usefid` is the ID which was assigned,

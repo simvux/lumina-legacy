@@ -17,6 +17,7 @@ pub struct ParseError {
     pub source_index: usize,
     pub variant: ParseFault,
     pub source_code: Option<String>,
+    pub module_fid: Option<usize>,
     pub module_name: Option<FileSource>,
     pub parser: Option<Parser>,
 }
@@ -30,18 +31,26 @@ impl ParseError {
             source_index: i,
             variant: err,
             source_code: None,
+            module_fid: None,
             module_name: None,
             parser: None,
         }
     }
 
-    pub fn fallback(mut self, fallback: usize) -> Self {
+    pub fn fallback_index(mut self, fallback: usize) -> Self {
         if self.source_index == 0 {
             self.source_index = fallback;
         }
         self
     }
+    pub fn fallback_fid(mut self, fid: usize) -> Self {
+        if self.module_fid.is_none() {
+            self.module_fid = Some(fid);
+        }
+        self
+    }
 
+    /*
     pub fn with_source_code(mut self, source: String, source_name: &FileSource) -> Self {
         if self.source_code.is_some() || self.module_name.is_some() {
             return self;
@@ -59,6 +68,39 @@ impl ParseError {
         self.source_code = Some(source);
         self.module_name = Some(source_name.clone());
         self
+    }
+    */
+    pub fn load_source_code(mut self) -> Self {
+        let parser = match &self.parser {
+            None => {
+                panic!("Parser not appended to load source file in final stage of error pipeline")
+            }
+            Some(p) => p,
+        };
+        if self.source_code.is_some() {
+            self
+        } else {
+            let filesource = if let Some(fs) = &self.module_name {
+                fs
+            } else if let Some(fid) = self.module_fid {
+                self.module_name = Some(parser.modules[fid].module_path.clone());
+                &parser.modules[fid].module_path
+            } else {
+                panic!(
+                    "Insufficent information to load source file in final stage of error pipeline"
+                );
+            };
+            let mut source_code = String::with_capacity(20);
+            match File::open(filesource.to_pathbuf(&parser.environment)) {
+                Err(e) => {
+                    eprintln!("leaf: cannot open source code file: {}", e);
+                    return self;
+                }
+                Ok(mut f) => f.read_to_string(&mut source_code).unwrap(),
+            };
+            self.source_code = Some(source_code);
+            self
+        }
     }
 
     pub fn with_parser(mut self, parser: Parser) -> Self {

@@ -56,11 +56,7 @@ fn main() {
         let fid = match parser.tokenize(file_path.clone(), source_code.chars()) {
             Ok(functions) => functions,
             Err(e) => {
-                println!(
-                    "{}",
-                    e.with_source_code(source_code, &file_path)
-                        .with_parser(parser)
-                );
+                println!("{}", e.with_parser(parser).load_source_code());
                 return;
             }
         };
@@ -79,10 +75,9 @@ fn main() {
         }
 
         // Verify syntax, infer types and compile to low-level IR.
-
         match IrBuilder::new(parser, environment.clone()).start_type_checker(fid, "main", &[]) {
             Err(e) => {
-                println!("{}", e.with_source_code(source_code, &file_path));
+                println!("{}", e.load_source_code());
                 return;
             }
             Ok(ir) => ir,

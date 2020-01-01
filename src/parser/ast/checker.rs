@@ -86,11 +86,6 @@ impl<'a> IrBuilder {
                         match meta.try_use(&ident.name) {
                             Some(identmeta) => match identmeta.ident {
                                 Identifiable::Param(id) => {
-                                    // TODO: I need to bundle an came_from_fid field to
-                                    // Type::Function in order to properly pick the correct
-                                    // functions.
-                                    //
-                                    // Actually, do I? Not sure.
                                     let r#type = match &identmeta.r#type {
                                         MaybeType::Infer(mt) => mt.borrow().clone().unwrap(),
                                         MaybeType::Known(t) => t.clone(),
@@ -100,20 +95,23 @@ impl<'a> IrBuilder {
                                             return Err(ParseFault::ParamCallAmountMismatch(
                                                 Box::new((takes, gives, param_types)),
                                             )
-                                            .to_err(token.pos()));
+                                            .to_err(token.pos())
+                                            .fallback_fid(meta.fid));
                                         }
                                         if takes.len() != param_types.len() {
                                             return Err(ParseFault::ParamCallAmountMismatch(
                                                 Box::new((takes, gives, param_types)),
                                             )
-                                            .to_err(token.pos()));
+                                            .to_err(token.pos())
+                                            .fallback_fid(meta.fid));
                                         }
                                         for (i, take) in takes.iter().enumerate() {
                                             if *take != param_types[i].clone().unwrap() {
                                                 return Err(ParseFault::ParamCallMismatch(
                                                     Box::new((takes, gives, param_types)),
                                                 )
-                                                .to_err(token.pos()));
+                                                .to_err(token.pos())
+                                                .fallback_fid(meta.fid));
                                             }
                                         }
                                         Ok((
@@ -125,7 +123,8 @@ impl<'a> IrBuilder {
                                             r#type,
                                             param_types,
                                         )))
-                                        .to_err(token.pos()))
+                                        .to_err(token.pos())
+                                        .fallback_fid(meta.fid))
                                     }
                                 }
                                 _ => unimplemented!("{:?}", identmeta),
@@ -133,7 +132,9 @@ impl<'a> IrBuilder {
                             None => {
                                 let (t, findex) = self
                                     .find_and_build_function(meta.fid, ident, &mut param_types)
-                                    .map_err(|e| e.fallback(token.pos()))?;
+                                    .map_err(|e| {
+                                        e.fallback_index(token.pos()).fallback_fid(meta.fid)
+                                    })?;
                                 Ok((
                                     MaybeType::Known(t),
                                     ir::Entity::FunctionCall(findex as u32, evaluated_params),
@@ -143,7 +144,7 @@ impl<'a> IrBuilder {
                     }
                     ast::Callable::Builtin(ident) => {
                         let (id, nt) = ir::bridge::get_funcid(&ident.name)
-                            .map_err(|e| e.to_err(token.pos()))?;
+                            .map_err(|e| e.to_err(token.pos()).fallback_fid(meta.fid))?;
                         let mt = match nt {
                             ir::bridge::NaiveType::Known(t) => MaybeType::Known(t),
                             ir::bridge::NaiveType::Matching(i) => param_types[i as usize].clone(),
@@ -229,7 +230,7 @@ impl<'a> IrBuilder {
             },
             ast::Entity::If(branches, else_do) => self
                 .if_expression(branches, else_do, meta)
-                .map_err(|e| e.fallback(token.pos())),
+                .map_err(|e| e.fallback_index(token.pos()).fallback_fid(meta.fid)),
             ast::Entity::First(branches) => self.first_statement(branches, meta),
             ast::Entity::List(branches) => self.list(branches, meta),
             ast::Entity::SingleIdent(ident) => match meta.try_use(&ident.name) {
@@ -244,7 +245,8 @@ impl<'a> IrBuilder {
                                     gives.clone(),
                                     Vec::new(),
                                 )))
-                                .to_err(token.pos()));
+                                .to_err(token.pos())
+                                .fallback_fid(meta.fid));
                             }
                             return Ok((
                                 MaybeType::Known(gives.clone()),
@@ -265,7 +267,13 @@ impl<'a> IrBuilder {
                         .parser
                         .find_func((meta.fid, ident, NO_PARAMS))
                         .map_err(|e| {
-                            ParseFault::IdentifierNotFound(ident.name.clone()).to_err(token.pos())
+                            if let ParseFault::FunctionNotFound(_, _) = e {
+                                ParseFault::IdentifierNotFound(ident.name.clone())
+                            } else {
+                                e
+                            }
+                            .to_err(token.pos())
+                            .fallback_fid(meta.fid)
                         })?;
                     let (t, findex) = self.build_function(meta, &entry)?;
                     Ok((
@@ -274,7 +282,9 @@ impl<'a> IrBuilder {
                     ))
                 }
             },
-            ast::Entity::Lambda(_, _) => Err(ParseFault::ParameterlessLambda.to_err(token.pos())),
+            ast::Entity::Lambda(_, _) => Err(ParseFault::ParameterlessLambda
+                .to_err(token.pos())
+                .fallback_fid(meta.fid)),
         }
     }
 
@@ -293,7 +303,8 @@ impl<'a> IrBuilder {
                 Some(expected) => {
                     if t != *expected {
                         return Err(ParseFault::ListEntryTypeMismatch(t, expected.clone(), i)
-                            .to_err(branch.pos()));
+                            .to_err(branch.pos())
+                            .fallback_fid(meta.fid));
                     }
                 }
             }
@@ -323,9 +334,9 @@ impl<'a> IrBuilder {
             let (t, v) = self.build(cond, meta)?;
             let t = t.unwrap();
             if t != Type::Bool {
-                return Err(
-                    ParseFault::IfConditionNotBoolean(cond.clone().inner, t).to_err(cond.pos())
-                );
+                return Err(ParseFault::IfConditionNotBoolean(cond.clone().inner, t)
+                    .to_err(cond.pos())
+                    .fallback_fid(meta.fid));
             }
             buf.push(v);
             let (t, v) = self.build(eval, meta)?;
@@ -343,7 +354,8 @@ impl<'a> IrBuilder {
                 branch_types,
                 (branches.to_vec(), else_do.clone()),
             )
-            .to_err(0))
+            .to_err(0)
+            .fallback_fid(meta.fid))
         }
     }
 
