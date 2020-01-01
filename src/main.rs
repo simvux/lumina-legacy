@@ -65,7 +65,7 @@ fn main() {
             }
         };
         if environment.output.ast {
-            println!("{:#?}", &parser.modules[fid]);
+            println!("{:#?}", &parser.modules);
         }
 
         // Verify syntax, infer types and compile to low-level IR.

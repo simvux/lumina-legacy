@@ -102,8 +102,13 @@ impl<'a> IrBuilder {
                                             )
                                             .to_err(token.pos()));
                                         }
+                                        if takes.len() != param_types.len() {
+                                            return Err(ParseFault::ParamCallAmountMismatch(
+                                                Box::new((takes, gives, param_types)),
+                                            )
+                                            .to_err(token.pos()));
+                                        }
                                         for (i, take) in takes.iter().enumerate() {
-                                            // TODO: Amount mismatches
                                             if *take != param_types[i].clone().unwrap() {
                                                 return Err(ParseFault::ParamCallMismatch(
                                                     Box::new((takes, gives, param_types)),
@@ -230,6 +235,22 @@ impl<'a> IrBuilder {
             ast::Entity::SingleIdent(ident) => match meta.try_use(&ident.name) {
                 Some(found) => match found.ident {
                     Identifiable::Param(id) => {
+                        // TODO: Handle FunctionParam
+                        if let MaybeType::Known(Type::Function(box (takes, gives))) = &found.r#type
+                        {
+                            if !takes.is_empty() {
+                                return Err(ParseFault::ParamCallAmountMismatch(Box::new((
+                                    takes.clone(),
+                                    gives.clone(),
+                                    Vec::new(),
+                                )))
+                                .to_err(token.pos()));
+                            }
+                            return Ok((
+                                MaybeType::Known(gives.clone()),
+                                ir::Entity::ParameterCall(id as u32, Vec::new()),
+                            ));
+                        }
                         Ok((found.r#type.clone(), ir::Entity::Parameter(id as u16)))
                     }
                     Identifiable::Captured(id) => {

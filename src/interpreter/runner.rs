@@ -14,19 +14,16 @@ pub struct Runner<'a> {
     captured: Vec<Value>,
 }
 
-macro_rules! debug {
-    ($($arg:tt)*) => (
-        #[cfg(debug_assertions)]
-        print!(" runner -> ")
-        #[cfg(debug_assertions)]
-        println!($($arg)*);
-    )
-}
-
 fn debug_dump_entity(entity: &Entity) {
     match entity {
         Entity::Parameter(_) | Entity::Captured(_) | Entity::Inlined(_) | Entity::List(_) => {}
-        _ => println!("{}", entity),
+        _ => println!(
+            " {g}runner{r} {y}->{r} {}",
+            entity,
+            r = Fg(Reset),
+            g = Fg(Green),
+            y = Fg(Yellow)
+        ),
     }
 }
 
@@ -53,7 +50,9 @@ impl<'a> Runner<'a> {
 
     fn run(mut self) -> Value {
         loop {
-            debug!("{}", &self.entity);
+            #[cfg(debug_assertions)]
+            debug_dump_entity(&self.entity);
+
             match self.entity {
                 Entity::RustCall(index, params) => return self.rust_call(*index, params),
                 Entity::Parameter(n) => return self.params.clone_param(*n as usize),
