@@ -179,17 +179,19 @@ The project is not yet in an usable state but we're getting there!
  - [ ] Add { a | field = } and { field = } 
  - [ ] Add match expressions (and patterns?)
  - [x] Add lambda support
- - [ ] Implement function to closure conversion using '#'
+ - [x] Implement function to closure conversion using '#'
  - [ ] Implement custom types (structs/enums)
  - [x] Design and implement generics
  - [ ] Internally design and implement implicit result handling
  - [ ] Write Leaf's standard library abstracting over the Rust bridge
- - [ ] Add a proper CLI
+ - [x] Add a proper CLI
  - [ ] Design and Implement multithreadding (green-threadded concurrent mapping is an idea)
  - [x] Implement stack-safe recursion
  - [x] Implement function overloading
  - [ ] Make `or` and `and` builtins instead of user-defined operators in prelude (to improve errors and break op rules)
  - [x] Implement fmt::Display for our IR
- - [ ] Optimize away indirection
+ - [x] Optimize away indirection
+ - [ ] Optimize away indirection of parameters in forking calls
  - [ ] Constant evaluation optimization
  - [ ] Strings! 
+ - [ ] Figure out how we're gonna do files/sockets. Expose raw descriptors and syscalls? 
