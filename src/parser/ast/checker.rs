@@ -268,7 +268,6 @@ impl<'a> IrBuilder {
                         let (t, param_types, findex) = self
                             .find_and_build_only_suitable(meta.fid, ident)
                             .map_err(|e| e.fallback_index(token.pos()).fallback_fid(meta.fid))?;
-                        dbg!(&t, findex);
                         Ok((
                             MaybeType::Known(Type::Function(Box::new((param_types.to_vec(), t)))),
                             ir::Entity::LambdaPointer(Box::new((
@@ -304,7 +303,6 @@ impl<'a> IrBuilder {
 
                     let (t, v) = self.build(lambda_token, &mut new_meta)?;
                     let to_capture = meta.was_used(&new_meta);
-                    dbg!(&v, &to_capture);
                     Ok((
                         MaybeType::Known(Type::Function(Box::new((
                             infered_param_types
