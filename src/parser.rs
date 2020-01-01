@@ -236,6 +236,40 @@ impl Parser {
             }
         }
     }
+
+    pub fn variants_including_prelude(
+        &self,
+        self_fid: usize,
+        ident: &Identifier,
+    ) -> Result<(&HashMap<Vec<Type>, usize>, usize), ParseFault> {
+        let fid = {
+            match ident.path.len() {
+                0 => self_fid,
+                1 => {
+                    let mod_name = &ident.path[0];
+                    self.modules[self_fid].get_import(mod_name)?
+                }
+                _ => return Err(ParseFault::InvalidPath(ident.path.clone())),
+            }
+        };
+
+        match self.modules[fid].function_ids.get(&ident.name) {
+            Some(variants) => Ok((variants, fid)),
+            None => {
+                // Wasn't find, so lets try prelude variants
+                if self_fid == fid && self_fid != PRELUDE_FID {
+                    if let Some(variants) = self
+                        .modules
+                        .get(PRELUDE_FID)
+                        .and_then(|m| m.function_ids.get(&ident.name))
+                    {
+                        return Ok((variants, fid));
+                    }
+                };
+                Err(ParseFault::FunctionNotFound(ident.clone(), fid))
+            }
+        }
+    }
 }
 
 impl fmt::Debug for Parser {

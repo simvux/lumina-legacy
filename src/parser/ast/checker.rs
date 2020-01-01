@@ -35,6 +35,79 @@ impl<'a> IrBuilder {
         self.build_function(meta, entry)
     }
 
+    // If we only want *one* singular variant and error with "annotation required" whenever we get
+    // multiple variants.
+    pub fn find_and_build_only_suitable(
+        &'a self,
+        self_fid: usize,
+        ident: &Identifier,
+    ) -> Result<(Type, &[Type], usize), ParseError> {
+        let (variants, fid) = self
+            .parser
+            .variants_including_prelude(self_fid, ident)
+            .map_err(|e| e.to_err(0))?;
+        let funcid = match variants.len() {
+            1 => match &ident.anot {
+                Some(anot) => variants.get(anot.as_slice()).ok_or_else(|| {
+                    ParseFault::FunctionVariantNotFound(
+                        ident.clone(),
+                        anot.iter()
+                            .cloned()
+                            .map(|t| MaybeType::Known(t))
+                            .collect::<Vec<_>>(),
+                        fid,
+                    )
+                    .to_err(0)
+                })?,
+                None => variants.values().next().unwrap(),
+            },
+            _ => match &ident.anot {
+                Some(anot) => variants.get(anot.as_slice()).ok_or_else(|| {
+                    ParseFault::FunctionVariantNotFound(
+                        ident.clone(),
+                        anot.iter()
+                            .cloned()
+                            .map(|t| MaybeType::Known(t))
+                            .collect::<Vec<_>>(),
+                        fid,
+                    )
+                    .to_err(0)
+                })?,
+                None => {
+                    return Err(ParseFault::FunctionConversionRequiresAnnotation(
+                        ident.clone(),
+                        variants.clone(),
+                    )
+                    .to_err(0))
+                }
+            },
+        };
+        let func = &self.parser.modules[fid].functions[*funcid];
+        let meta = ast::Meta {
+            fid,
+            ident: func.name.clone(),
+            return_type: func.returns.clone(),
+            identifiers: func
+                .parameter_names
+                .iter()
+                .cloned()
+                .zip(
+                    func.parameter_types
+                        .iter()
+                        .cloned()
+                        .enumerate()
+                        .map(|(i, t)| ast::IdentMeta {
+                            use_counter: 0,
+                            r#type: MaybeType::Known(t),
+                            ident: Identifiable::Param(i),
+                        }),
+                )
+                .collect(),
+        };
+        let (t, findex) = self.build_function(meta, &func.body)?;
+        Ok((t, &func.parameter_types, findex))
+    }
+
     pub fn build_function(
         &'a self,
         mut meta: Meta,
@@ -180,6 +253,10 @@ impl<'a> IrBuilder {
                 }
             }
             ast::Entity::Pass(pass) => match pass {
+                // `map #func [1,2,3]`
+                // is actually just turned into
+                // `map #(\n -> func n) [1,2,3]`
+                // the ir optimizer should take care of indirection if that becomes a problem
                 ast::Passable::Func(ident) => match meta.try_use(&ident.name) {
                     Some(im) => match im.ident {
                         Identifiable::Param(n) => {
@@ -187,7 +264,22 @@ impl<'a> IrBuilder {
                         }
                         _ => unimplemented!(),
                     },
-                    None => unimplemented!(),
+                    None => {
+                        let (t, param_types, findex) = self
+                            .find_and_build_only_suitable(meta.fid, ident)
+                            .map_err(|e| e.fallback_index(token.pos()).fallback_fid(meta.fid))?;
+                        dbg!(&t, findex);
+                        Ok((
+                            MaybeType::Known(Type::Function(Box::new((param_types.to_vec(), t)))),
+                            ir::Entity::LambdaPointer(Box::new((
+                                ir::Entity::FunctionCall(
+                                    findex as u32,
+                                    vec![ir::Entity::Parameter(0)],
+                                ),
+                                vec![],
+                            ))),
+                        ))
+                    }
                 },
                 ast::Passable::PartialFunc(ident, pre_given) => {
                     unimplemented!("{:?}", token);
@@ -212,7 +304,7 @@ impl<'a> IrBuilder {
 
                     let (t, v) = self.build(lambda_token, &mut new_meta)?;
                     let to_capture = meta.was_used(&new_meta);
-
+                    dbg!(&v, &to_capture);
                     Ok((
                         MaybeType::Known(Type::Function(Box::new((
                             infered_param_types

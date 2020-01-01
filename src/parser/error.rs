@@ -1,8 +1,7 @@
 use super::{
-    ast, ast::Identifiable, tokenizer::Operator, FileSource, FunctionBuilder, Identifier,
-    IdentifierType, Key, MaybeType, Parser, RawToken, Tracked, Type,
+    ast, ast::Identifiable, tokenizer::Operator, FileSource, Identifier, IdentifierType, Key,
+    MaybeType, Parser, RawToken, Tracked, Type,
 };
-use crate::env::Environment;
 use std::convert::Into;
 use std::fmt;
 use std::fs::File;
@@ -50,26 +49,6 @@ impl ParseError {
         self
     }
 
-    /*
-    pub fn with_source_code(mut self, source: String, source_name: &FileSource) -> Self {
-        if self.source_code.is_some() || self.module_name.is_some() {
-            return self;
-        };
-        self.module_name = Some(source_name.clone());
-        self.source_code = Some(source);
-        self
-    }
-    pub fn with_source_load(mut self, env: &Environment, source_name: &FileSource) -> Self {
-        let mut source = String::with_capacity(20);
-        File::open(source_name.to_pathbuf(&env))
-            .unwrap()
-            .read_to_string(&mut source)
-            .unwrap();
-        self.source_code = Some(source);
-        self.module_name = Some(source_name.clone());
-        self
-    }
-    */
     pub fn load_source_code(mut self) -> Self {
         let parser = match &self.parser {
             None => {
@@ -165,6 +144,7 @@ pub enum ParseFault {
     FnTypeReturnMismatch(Box<ast::Meta>, Type),
     FunctionNotFound(Identifier, usize),
     FunctionVariantNotFound(Identifier, Vec<MaybeType>, usize),
+    FunctionConversionRequiresAnnotation(Identifier, std::collections::HashMap<Vec<Type>, usize>),
     IdentifierNotFound(String),
     Internal,
 }
@@ -226,6 +206,11 @@ impl fmt::Display for ParseError {
             BridgedWrongPathLen(entries) => write!(f, "`{}` wrong length of path", entries.join(":")),
             BridgedFunctionNotFound(ident) => write!(f, "No bridged function named `{}`", ident),
             BridgedFunctionNoMode(c) => write!(f, "Bridged path mode doesn't exist, got `{}`", c),
+            FunctionConversionRequiresAnnotation(ident, variants) => {
+                write!(f, "This function conversion requires a type annotation. I don't know which of these variants to use.\n  {}", variants.keys().map(|params| {
+                    format_function_header(&ident.name, Some(params), NO)
+                }).collect::<Vec<_>>().join("\n  "))
+            }
             ParamCallMismatch(box (takes, _gives, got)) => {
 
                 write!(f, "The function call originating from this parameter has the wrong types of arguments\n wanted  {}\n but got {}", 
