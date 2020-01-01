@@ -71,7 +71,14 @@ impl FileSource {
     pub fn to_pathbuf<'a>(&'a self, env: &Environment) -> PathBuf {
         match self {
             FileSource::Project(levels) => {
-                let mut path = env.entrypoint.parent().unwrap().join(levels.join("/"));
+                let mut path = env
+                    .entrypoint
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join(levels.join("/"));
+                dbg!(&path, &env.entrypoint);
                 path.set_extension("lf");
                 path
             }
@@ -81,6 +88,14 @@ impl FileSource {
                 path
             }
             FileSource::Prelude => panic!("Use statements in prelude unsupported"),
+        }
+    }
+
+    pub fn is_entrypoint(&self) -> bool {
+        if let FileSource::Project(path) = self {
+            path.len() == 1
+        } else {
+            false
         }
     }
 }
@@ -99,6 +114,7 @@ impl TryFrom<(&Identifier, &Environment)> for FileSource {
     type Error = ();
 
     fn try_from((ident, env): (&Identifier, &Environment)) -> Result<FileSource, Self::Error> {
+        dbg!(&ident);
         let mut from_project_path = env.entrypoint.parent().unwrap().to_owned();
 
         let mut file_postfix = ident.path.join("/");

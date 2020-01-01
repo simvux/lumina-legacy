@@ -70,9 +70,10 @@ impl ParseError {
                 );
             };
             let mut source_code = String::with_capacity(20);
-            match File::open(filesource.to_pathbuf(&parser.environment)) {
+            let path = filesource.to_pathbuf(&parser.environment);
+            match File::open(&path) {
                 Err(e) => {
-                    eprintln!("leaf: cannot open source code file: {}", e);
+                    eprintln!("leaf: cannot open source code file `{:?}`: {}", path, e);
                     return self;
                 }
                 Ok(mut f) => f.read_to_string(&mut source_code).unwrap(),

@@ -8,9 +8,11 @@ use std::rc::Rc;
 #[macro_use]
 extern crate smallvec;
 
+/*
 pub fn entrypoint() -> FileSource {
     FileSource::Project(vec!["main".to_owned()])
 }
+*/
 
 mod parser;
 use parser::Parser;
@@ -49,11 +51,13 @@ fn main() {
             .unwrap()
             .read_to_string(&mut source_code)
             .unwrap();
-        let file_path = entrypoint();
 
         // Construct our AST by streaming tokens directly from the file into
         // parser.modules.{functions,types} seperated only by headers such as {fn,type,operator}
-        let fid = match parser.tokenize(file_path.clone(), source_code.chars()) {
+        let fid = match parser.tokenize(
+            FileSource::Project(vec![environment.entrypoint_name.clone()]),
+            source_code.chars(),
+        ) {
             Ok(functions) => functions,
             Err(e) => {
                 println!("{}", e.with_parser(parser).load_source_code());

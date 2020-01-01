@@ -182,7 +182,7 @@ impl Parser {
 
                         // We search for filepath both from $LEAFPATH and relatively from entrypoint
                         let file_path = {
-                            if module_path == crate::entrypoint() {
+                            if module_path.is_entrypoint() {
                                 leafmod::FileSource::try_from((&ident, &*self.environment)).unwrap()
                             } else {
                                 let mut new_module_path = module_path.clone();
