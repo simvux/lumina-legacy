@@ -246,10 +246,19 @@ impl FunctionBuilder {
                     let returns = (buf, self.parse_return_type(tokenizer)?);
                     return Ok(returns);
                 }
+                RawToken::Key(Key::ParenClose) => {
+                    if buf.len() > 1 {
+                        panic!("ET: Malformed parameter type");
+                    }
+                    match buf.pop() {
+                        Some(returns) => return Ok((buf, returns)),
+                        None => panic!("ET: Empty parameter type (no return type is not allowed)"),
+                    }
+                }
                 _ => {
                     return ParseFault::GotButExpected(next.inner, self.err_type_expecting())
                         .to_err(source_index)
-                        .into()
+                        .into();
                 }
             }
         }
