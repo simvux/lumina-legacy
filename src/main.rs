@@ -65,7 +65,15 @@ fn main() {
             }
         };
         if environment.output.ast {
-            println!("{:#?}", &parser.modules);
+            println!(
+                "{}",
+                &parser
+                    .modules
+                    .iter()
+                    .map(|a| std::fmt::Display::to_string(a))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
         }
 
         // Verify syntax, infer types and compile to low-level IR.

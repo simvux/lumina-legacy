@@ -392,15 +392,11 @@ impl fmt::Debug for FunctionBuilder {
             .join("\n  ");
         write!(
             f,
-            "fn{} {} {} ({})\n{:#?}{}",
-            match self.name.kind {
-                IdentifierType::Normal => "",
-                _ => "(op)",
-            },
+            "fn {} {} ({})\n{}",
             self.name,
             self.parameter_names.join(" "),
             annotation,
-            self.body,
+            // self.body,
             where_statements,
         )
     }

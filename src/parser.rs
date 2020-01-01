@@ -262,36 +262,3 @@ impl fmt::Debug for Parser {
         f.write_str(&s)
     }
 }
-
-impl fmt::Debug for ParseModule {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "IMPORTS:\n {}\nTYPES:\n {}\nFUNCTIONS:\n{}",
-            self.imports
-                .iter()
-                .map(|(name, fid)| format!(" {} -> {}", name, fid))
-                .collect::<Vec<String>>()
-                .join("\n"),
-            self.types
-                .iter()
-                .map(|(tname, tid)| format!(
-                    "  #{} {}\n{}",
-                    tid,
-                    tname,
-                    self.type_fields[*tid]
-                        .iter()
-                        .map(|(f, t)| format!("      {} {}", f, t))
-                        .collect::<Vec<String>>()
-                        .join("\n")
-                ))
-                .collect::<Vec<String>>()
-                .join("\n"),
-            self.functions
-                .iter()
-                .map(|funcb| format!("  {:?}", funcb))
-                .collect::<Vec<String>>()
-                .join("\n")
-        )
-    }
-}

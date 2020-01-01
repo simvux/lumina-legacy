@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::path::PathBuf;
+use termion::color::{Fg, Green, Reset};
 
 // Files can be loaded either from relative path or leafpath
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
@@ -130,5 +131,73 @@ impl TryFrom<(&Identifier, &Environment)> for FileSource {
         }
 
         panic!("ET: File {:?} not found", ident.name);
+    }
+}
+
+impl fmt::Debug for ParseModule {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "IMPORTS:\n{}\nTYPES:\n {}\nFUNCTIONS:\n{}",
+            self.imports
+                .iter()
+                .map(|(name, fid)| format!(" {} -> {}", name, fid))
+                .collect::<Vec<String>>()
+                .join("\n"),
+            self.types
+                .iter()
+                .map(|(tname, tid)| format!(
+                    "  #{} {}\n{}",
+                    tid,
+                    tname,
+                    self.type_fields[*tid]
+                        .iter()
+                        .map(|(f, t)| format!("      {} {}", f, t))
+                        .collect::<Vec<String>>()
+                        .join("\n")
+                ))
+                .collect::<Vec<String>>()
+                .join("\n"),
+            self.functions
+                .iter()
+                .map(|funcb| format!("  {:?}", funcb))
+                .collect::<Vec<String>>()
+                .join("\n")
+        )
+    }
+}
+
+impl fmt::Display for ParseModule {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{g}IMPORTS{r}:\n{}\n{g}TYPES{r}:\n {}\n{g}FUNCTIONS{r}:\n{}",
+            self.imports
+                .iter()
+                .map(|(name, fid)| format!(" {} -> {}", name, fid))
+                .collect::<Vec<String>>()
+                .join("\n"),
+            self.types
+                .iter()
+                .map(|(tname, tid)| format!(
+                    "  #{} {}\n{}",
+                    tid,
+                    tname,
+                    self.type_fields[*tid]
+                        .iter()
+                        .map(|(f, t)| format!("      {} {}", f, t))
+                        .collect::<Vec<String>>()
+                        .join("\n")
+                ))
+                .collect::<Vec<String>>()
+                .join("\n"),
+            self.functions
+                .iter()
+                .map(|funcb| format!("{:?}  {}", funcb, &funcb.body))
+                .collect::<Vec<String>>()
+                .join("\n"),
+            r = Fg(Reset),
+            g = Fg(Green),
+        )
     }
 }
