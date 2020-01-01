@@ -16,12 +16,15 @@ fn take n list (int [a] -> [a])
     then list
     else head list |> take (n - 1) << remove 0 list
 
-fn map f list ((a -> b) [a] -> [b]) 
+fn map_native f list ((a -> b) [a] -> [b]) 
   if len list == 0
     then list
     else (f << head list) |> map #f << remove 0 list
 
-fn foldr f list ((a a -> a) [a] -> a)
+fn map f list ((a -> b) [a] -> [b])
+  builtin:map_overwrite f list
+
+fn foldr_native f list ((a a -> a) [a] -> a)
   if len list == 0
     // TODO: This should runtime error instead
     then head list
@@ -29,7 +32,17 @@ fn foldr f list ((a a -> a) [a] -> a)
     then head list
   else f (head list) << foldr #f << remove 0 list
 
-fn foldl f acc list ((a b -> b) b [a] -> b)
+fn foldl_native f acc list ((a b -> b) b [a] -> b)
   if len list == 0
     then acc
     else foldl #f (f (head list) acc) << remove 0 list
+
+fn repeat n f (int (a) -> [a])
+  if n == 1
+    then [f]
+    else f |> repeat (n - 1) #f 
+
+fn range from to (int int -> [int])
+  if from == to
+    then [to]
+    else from |> range (from + 1) to
