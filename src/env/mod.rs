@@ -46,7 +46,7 @@ impl Environment {
             if !path.exists() {
                 return Err("file does not exist");
             }
-            let mut env = Environment::from(name, path);
+            let mut env = Environment::from(name.split('/').last().unwrap().into(), path);
 
             // Skipping first since that's binary path
             env.parse_flags(args.drain(1..));
