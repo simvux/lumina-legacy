@@ -5,4 +5,7 @@ fn sum list ([int] -> int)
   list:foldr #(\n p -> n + p) list
 
 fn main
-  io:puts << sum << list:map #(\n -> n + 1) [1,2,3]
+  io:puts 
+    << sum 
+    << list:map #(\n -> n + 1) 
+    << [1,3] <> list:range 5 20
