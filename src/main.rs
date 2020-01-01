@@ -64,9 +64,9 @@ fn main() {
                 return;
             }
         };
-        if environment.output.ast {
+        if environment.output.ast_full {
             println!(
-                "{}",
+                "{}\n",
                 &parser
                     .modules
                     .iter()
@@ -74,6 +74,8 @@ fn main() {
                     .collect::<Vec<_>>()
                     .join("\n")
             );
+        } else if environment.output.ast_entry {
+            println!("{}\n", &parser.modules[fid]);
         }
 
         // Verify syntax, infer types and compile to low-level IR.

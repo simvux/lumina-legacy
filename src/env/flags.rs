@@ -1,6 +1,5 @@
 use super::Environment;
 use crate::VERSION;
-use std::fmt;
 
 #[allow(clippy::all)]
 const ARGS: &[(&[&str], &str, fn(&mut Environment))] = &[
@@ -21,13 +20,20 @@ const ARGS: &[(&[&str], &str, fn(&mut Environment))] = &[
         &["--show-ast", "--ast"],
         "dump the AST headers of all used modules",
         |env| {
-            env.output.ast = true;
+            env.output.ast_full = true;
         },
     ),
     (
         &["--no-optimize"],
         "turn of optimizations such as function inlining",
         |env| env.optimize = false,
+    ),
+    (
+        &["--show-ast-entry", "--ast-entry"],
+        "dump the AST headers for entrypoint module",
+        |env| {
+            env.output.ast_entry = true;
+        },
     ),
 ];
 

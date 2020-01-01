@@ -3,7 +3,8 @@ use std::default::Default;
 #[derive(Debug)]
 pub struct Output {
     pub ir: bool,
-    pub ast: bool,
+    pub ast_full: bool,
+    pub ast_entry: bool,
     pub run: bool,
     pub help: bool,
 }
@@ -13,7 +14,8 @@ impl Default for Output {
     fn default() -> Self {
         Output {
             ir: false,
-            ast: false,
+            ast_full: false,
+            ast_entry: true,
             run: true,
             help: false,
         }
@@ -25,7 +27,8 @@ impl Default for Output {
     fn default() -> Self {
         Output {
             ir: false,
-            ast: false,
+            ast_full: false,
+            ast_entry: false,
             run: true,
             help: false,
         }

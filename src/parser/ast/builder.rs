@@ -236,6 +236,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             | RawToken::Key(Key::Then)
             | RawToken::Key(Key::Else)
             | RawToken::Key(Key::ListClose)
+            | RawToken::Key(Key::And)
             | RawToken::Key(Key::Elif) => Ok(Vec::new()),
             RawToken::NewLine => {
                 self.tokenizer.next();
