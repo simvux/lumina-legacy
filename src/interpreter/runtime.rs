@@ -33,11 +33,7 @@ impl Runtime {
                                         .cloned()
                                         .map(|p| p.inline_param(&params))
                                         .collect::<Vec<Entity>>();
-                                    println!(
-                                        "Turned {} into {}",
-                                        &self.instructions[being_optimized_i],
-                                        Entity::RustCall(*n, new_params.clone())
-                                    );
+
                                     self.instructions[being_optimized_i] =
                                         Entity::RustCall(*n, new_params);
 
@@ -51,11 +47,7 @@ impl Runtime {
                                     .cloned()
                                     .map(|p| p.inline_param(&params))
                                     .collect::<Vec<Entity>>();
-                                println!(
-                                    "Turned {} into {}",
-                                    &self.instructions[being_optimized_i],
-                                    Entity::FunctionCall(*child_findex, new_params.clone())
-                                );
+
                                 self.instructions[being_optimized_i] =
                                     Entity::FunctionCall(*child_findex, new_params);
 
