@@ -165,6 +165,14 @@ impl Parser {
 
                         self.new_type(fid, type_name, fields);
                     }
+                    Header::Enum => {
+                        unimplemented!();
+                        /*
+                        let (type_name, variants) = r#type::parse_enum_decl(&mut tokenizer)?;
+
+                        self.new_enum(fid, type_name, variants);
+                        */
+                    }
                     Header::Use => {
                         let ident = match tokenizer.next().map(|t| t.inner) {
                             Some(RawToken::Identifier(ident)) => ident,

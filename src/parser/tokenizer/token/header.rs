@@ -5,6 +5,7 @@ use std::fmt;
 pub enum Header {
     Function,
     Operator,
+    Enum,
     Type,
     Use,
 }
@@ -17,6 +18,7 @@ impl TryFrom<&str> for Header {
             "fn" => Header::Function,
             "type" => Header::Type,
             "use" => Header::Use,
+            "enum" => Header::Enum,
             "operator" => Header::Operator,
             _ => return Err(()),
         };
@@ -29,6 +31,7 @@ impl Header {
         match self {
             Header::Function => "fn",
             Header::Operator => "operator",
+            Header::Enum => "enum",
             Header::Type => "type",
             Header::Use => "use",
         }
@@ -37,11 +40,6 @@ impl Header {
 
 impl fmt::Display for Header {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Header::Function => f.write_str("fn"),
-            Header::Operator => f.write_str("operator"),
-            Header::Type => f.write_str("type"),
-            Header::Use => f.write_str("use"),
-        }
+        f.write_str(self.as_str())
     }
 }

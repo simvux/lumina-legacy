@@ -52,7 +52,10 @@ impl ParseError {
     pub fn load_source_code(mut self) -> Self {
         let parser = match &self.parser {
             None => {
-                panic!("Parser not appended to load source file in final stage of error pipeline")
+                println!(
+                    "Parser not appended to load source file in final stage of error pipeline"
+                );
+                return self;
             }
             Some(p) => p,
         };
@@ -65,9 +68,10 @@ impl ParseError {
                 self.module_name = Some(parser.modules[fid].module_path.clone());
                 &parser.modules[fid].module_path
             } else {
-                panic!(
+                println!(
                     "Insufficent information to load source file in final stage of error pipeline"
                 );
+                return self;
             };
             let mut source_code = String::with_capacity(20);
             let path = filesource.to_pathbuf(&parser.environment);
@@ -165,6 +169,7 @@ impl<'a> ParseFault {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        /*
         let parser = self
             .parser
             .as_ref()
@@ -173,31 +178,43 @@ impl fmt::Display for ParseError {
             .source_code
             .as_ref()
             .expect("Source code not appended to error in final scope");
-        if self.source_index != 0 {
-            let (raw_line, arrow, line_number) = locate_line(source, self.source_index);
-            let line = String::from_utf8(raw_line.to_vec()).unwrap();
-            let module_path = self
-                .module_name
-                .as_ref()
-                .expect("Module name not appended to error in final scope");
+        */
+        let parser = if let Some(parser) = self.parser.as_ref() {
+            if let Some(source) = self.source_code.as_ref() {
+                if self.source_index != 0 {
+                    let (raw_line, arrow, line_number) = locate_line(source, self.source_index);
+                    let line = String::from_utf8(raw_line.to_vec()).unwrap();
+                    let module_path = self
+                        .module_name
+                        .as_ref()
+                        .expect("Module name not appended to error in final scope");
 
-            write!(
-                f,
-                "{g}leaf{n} {}{g}:{n}\n {y}{}{n} | {}\n{}\n",
-                module_path,
-                line_number,
-                line,
-                std::iter::repeat(' ')
-                    .take(arrow + 3 + line_number.to_string().len())
-                    .collect::<String>()
-                    .add(color::Red.fg_str())
-                    .add("-^-")
-                    .add(color::Reset.fg_str()),
-                y = color::Yellow.fg_str(),
-                g = color::Green.fg_str(),
-                n = color::Reset.fg_str(),
-            )?;
-        }
+                    write!(
+                        f,
+                        "{g}leaf{n} {}{g}:{n}\n {y}{}{n} | {}\n{}\n",
+                        module_path,
+                        line_number,
+                        line,
+                        std::iter::repeat(' ')
+                            .take(arrow + 3 + line_number.to_string().len())
+                            .collect::<String>()
+                            .add(color::Red.fg_str())
+                            .add("-^-")
+                            .add(color::Reset.fg_str()),
+                        y = color::Yellow.fg_str(),
+                        g = color::Green.fg_str(),
+                        n = color::Reset.fg_str(),
+                    )?;
+                }
+                parser
+            } else {
+                println!("{:?}", self.variant);
+                return Ok(());
+            }
+        } else {
+            println!("{:?}", self.variant);
+            return Ok(());
+        };
 
         use ParseFault::*;
         match &self.variant {
