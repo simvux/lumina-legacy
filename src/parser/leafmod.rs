@@ -22,6 +22,7 @@ pub struct ParseModule {
 
     pub types: HashMap<String, usize>,
     pub type_fields: Vec<Vec<(String, Type)>>,
+
     pub imports: HashMap<String, usize>,
 
     pub module_path: FileSource,
