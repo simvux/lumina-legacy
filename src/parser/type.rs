@@ -1,11 +1,21 @@
 use super::ast::{Identifier, IdentifierType};
-use super::{ParseError, ParseFault, Tokenizer};
+use super::{tokenizer::TokenSource, ParseError, ParseFault, RawToken, Tokenizer};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
+
+macro_rules! assume {
+    ($path:path, $v:expr) => {
+        if let Some(($path(a), pos)) = $v.map(|a| a.sep()) {
+            (a, pos)
+        } else {
+            unreachable!()
+        }
+    };
+}
 
 #[derive(PartialEq, Debug, Clone, Hash, Eq)]
 pub enum Type {
@@ -72,8 +82,68 @@ impl std::default::Default for Type {
 
 pub fn parse_type_decl<I: Iterator<Item = char>>(
     tokenizer: &mut Tokenizer<I>,
-) -> Result<(String, Vec<(String, Type)>), ParseError> {
-    unimplemented!();
+) -> Result<(Identifier, Vec<(String, Type)>), ParseError> {
+    let first = tokenizer.next().ok_or_else(|| panic!("ET"))?;
+    let type_ident = if let RawToken::Identifier(ident) = first.inner {
+        ident
+    } else {
+        panic!("ET");
+    };
+    let (after, _after_pos) = tokenizer
+        .next()
+        .ok_or_else(|| panic!("ET: Wanted newline after type header and identifier"))?
+        .sep();
+    if after != RawToken::NewLine {
+        panic!(
+            "ET: Wanted newline after type header and identifier, got {:?}",
+            after
+        );
+    }
+
+    let mut fields = Vec::new();
+    loop {
+        match parse_field(tokenizer)? {
+            Some(field) => {
+                fields.push(field);
+                if let Some(a) = tokenizer.next() {
+                    let (rt, _pos) = a.sep();
+                    if rt != RawToken::NewLine {
+                        panic!("ET: Expected newline, got {:?}", rt);
+                    }
+                } else {
+                    // This field line was the last in the file
+                    return Ok((type_ident, fields));
+                }
+            }
+            None => return Ok((type_ident, fields)),
+        }
+    }
+}
+
+fn parse_field<I: Iterator<Item = char>>(
+    tokenizer: &mut Tokenizer<I>,
+) -> Result<Option<(String, Type)>, ParseError> {
+    let first = tokenizer.peek();
+
+    match first.map(|a| &a.inner) {
+        Some(RawToken::Identifier(_)) => {
+            let (field_name_ident, _field_pos) = assume!(RawToken::Identifier, tokenizer.next());
+            let (second, pos) = tokenizer.next().ok_or_else(|| panic!("ET"))?.sep();
+            if let RawToken::Identifier(field_type_ident) = second {
+                let t =
+                    Type::try_from(field_type_ident.name.as_str()).map_err(|e| e.to_err(pos))?;
+                Ok(Some((field_name_ident.name, t)))
+            } else {
+                panic!("ET {:?} cannot be used as field type", second);
+            }
+        }
+        Some(RawToken::NewLine) => {
+            tokenizer.next();
+            parse_field(tokenizer)
+        }
+        Some(RawToken::Header(_)) | None => Ok(None),
+        Some(other) => panic!("ET: Unexpected stuff here: {:?}", other),
+    }
 }
 
 impl TryFrom<&str> for Type {

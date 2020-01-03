@@ -83,7 +83,7 @@ impl Parser {
     fn new_type(&mut self, fid: usize, name: String, fields: Vec<(String, Type)>) -> usize {
         let module = &mut self.modules[fid];
         let typeid = module.types.len();
-        module.types.insert(name.to_owned(), typeid);
+        module.types.insert(name, typeid);
         module.type_fields.push(fields);
         typeid
     }
@@ -163,7 +163,7 @@ impl Parser {
                     Header::Type => {
                         let (type_name, fields) = r#type::parse_type_decl(&mut tokenizer)?;
 
-                        self.new_type(fid, type_name, fields);
+                        self.new_type(fid, type_name.name, fields);
                     }
                     Header::Enum => {
                         unimplemented!();
