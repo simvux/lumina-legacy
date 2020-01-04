@@ -15,16 +15,6 @@ impl<'a, I: Iterator<Item = char>> AstBuilder<'a, I> {
     }
 }
 
-macro_rules! assume {
-    ($path:path, $v:expr) => {
-        if let Some(($path(a), pos)) = $v.map(|a| a.sep()) {
-            (a, pos)
-        } else {
-            unreachable!()
-        }
-    };
-}
-
 impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
     // We run this on entrypoints. Such as the beginning of a function or the inbetweens of a (...)
     pub fn run_chunk(&mut self) -> Result<Tracked<Entity>, ParseError> {

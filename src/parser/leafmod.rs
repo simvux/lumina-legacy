@@ -1,4 +1,4 @@
-use super::{FunctionBuilder, Identifier, ParseFault, Type};
+use super::{CustomType, FunctionBuilder, Identifier, ParseFault, Type};
 use crate::env::Environment;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -20,8 +20,8 @@ pub struct ParseModule {
     pub function_ids: HashMap<String, HashMap<Vec<Type>, usize>>,
     pub functions: Vec<FunctionBuilder>,
 
-    pub types: HashMap<String, usize>,
-    pub type_fields: Vec<Vec<(String, Type)>>,
+    pub type_ids: HashMap<String, usize>,
+    pub types: Vec<CustomType>,
 
     pub imports: HashMap<String, usize>,
 
@@ -33,8 +33,8 @@ impl ParseModule {
         Self {
             function_ids: HashMap::new(),
             functions: Vec::new(),
-            types: HashMap::new(),
-            type_fields: Vec::new(),
+            type_ids: HashMap::new(),
+            types: Vec::new(),
             imports: HashMap::new(),
             module_path,
         }
@@ -153,18 +153,9 @@ impl fmt::Debug for ParseModule {
                 .map(|(name, fid)| format!(" {} -> {}", name, fid))
                 .collect::<Vec<String>>()
                 .join("\n"),
-            self.types
+            self.type_ids
                 .iter()
-                .map(|(tname, tid)| format!(
-                    "  #{} {}\n{}",
-                    tid,
-                    tname,
-                    self.type_fields[*tid]
-                        .iter()
-                        .map(|(f, t)| format!("      {} {}", f, t))
-                        .collect::<Vec<String>>()
-                        .join("\n")
-                ))
+                .map(|(tname, tid)| format!("  #{} {}\n{}", tid, tname, "TODO",))
                 .collect::<Vec<String>>()
                 .join("\n"),
             self.functions
@@ -180,24 +171,15 @@ impl fmt::Display for ParseModule {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{g}IMPORTS{r}:\n{}\n{g}TYPES{r}:\n {}\n{g}FUNCTIONS{r}:\n{}",
+            "{g}IMPORTS{r}:\n{}\n{g}TYPES{r}:\n{}\n{g}FUNCTIONS{r}:\n{}",
             self.imports
                 .iter()
                 .map(|(name, fid)| format!(" {} -> {}", name, fid))
                 .collect::<Vec<String>>()
                 .join("\n"),
-            self.types
+            self.type_ids
                 .iter()
-                .map(|(tname, tid)| format!(
-                    "  #{} {}\n{}",
-                    tid,
-                    tname,
-                    self.type_fields[*tid]
-                        .iter()
-                        .map(|(f, t)| format!("      {} {}", f, t))
-                        .collect::<Vec<String>>()
-                        .join("\n")
-                ))
+                .map(|(tname, tid)| format!("#{} {}{}", tid, tname, &self.types[*tid]))
                 .collect::<Vec<String>>()
                 .join("\n"),
             self.functions

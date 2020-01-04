@@ -5,14 +5,10 @@ use std::fs::File;
 use std::io::Read;
 use std::rc::Rc;
 
+mod macros;
+
 #[macro_use]
 extern crate smallvec;
-
-/*
-pub fn entrypoint() -> FileSource {
-    FileSource::Project(vec!["main".to_owned()])
-}
-*/
 
 mod parser;
 use parser::Parser;

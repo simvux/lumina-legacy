@@ -16,7 +16,7 @@ pub use function::FunctionBuilder;
 
 pub use leafmod::FileSource;
 mod r#type;
-pub use r#type::{MaybeType, Type};
+pub use r#type::{CustomType, Enum, MaybeType, Struct, Type};
 mod ast;
 pub use ast::{Identifier, IdentifierType, IrBuilder};
 mod error;
@@ -42,10 +42,6 @@ impl Parser {
             modules: Vec::new(),
             environment,
         }
-    }
-
-    fn _get_type_id(&self, fid: usize, name: &str) -> Option<usize> {
-        self.modules.get(fid)?.types.get(name).copied()
     }
 
     fn new_module(&mut self, source: FileSource) -> usize {
@@ -80,11 +76,37 @@ impl Parser {
         };
         funcid
     }
-    fn new_type(&mut self, fid: usize, name: String, fields: Vec<(String, Type)>) -> usize {
+    fn new_type(&mut self, fid: usize, ident: Identifier, fields: HashMap<String, Type>) -> usize {
         let module = &mut self.modules[fid];
         let typeid = module.types.len();
-        module.types.insert(name, typeid);
-        module.type_fields.push(fields);
+        let (name, type_args) = {
+            // TODO: type_args
+            (ident.name, vec![])
+        };
+        module.type_ids.insert(name, typeid);
+        module
+            .types
+            .push(CustomType::Struct(Struct { type_args, fields }));
+        typeid
+    }
+    fn new_enum(
+        &mut self,
+        fid: usize,
+        ident: Identifier,
+        fields: HashMap<String, Vec<Type>>,
+    ) -> usize {
+        let module = &mut self.modules[fid];
+        let typeid = module.types.len();
+        let (name, type_args) = {
+            // TODO: type_args
+            (ident.name, vec![])
+        };
+        if module.type_ids.insert(name, typeid).is_some() {
+            panic!("ET: Type already exists");
+        }
+        module
+            .types
+            .push(CustomType::Enum(Enum { fields, type_args }));
         typeid
     }
 
@@ -161,17 +183,14 @@ impl Parser {
                         self.new_function(fid, funcb);
                     }
                     Header::Type => {
-                        let (type_name, fields) = r#type::parse_type_decl(&mut tokenizer)?;
+                        let (type_name, fields) = r#type::r#struct::parse(&mut tokenizer)?;
 
-                        self.new_type(fid, type_name.name, fields);
+                        self.new_type(fid, type_name, fields);
                     }
                     Header::Enum => {
-                        unimplemented!();
-                        /*
-                        let (type_name, variants) = r#type::parse_enum_decl(&mut tokenizer)?;
+                        let (type_name, variants) = r#type::r#enum::parse(&mut tokenizer)?;
 
                         self.new_enum(fid, type_name, variants);
-                        */
                     }
                     Header::Use => {
                         let ident = match tokenizer.next().map(|t| t.inner) {
