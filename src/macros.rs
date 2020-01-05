@@ -8,3 +8,15 @@ macro_rules! assume {
         }
     };
 }
+
+#[allow(unused)]
+macro_rules! debug {
+    ($category:expr, $($arg:tt)*) => (
+        #[allow(unused_imports)]
+        use termion::color::{Fg, Green, Reset, Yellow};
+        #[cfg(debug_assertions)]
+        print!(" {}{} {}->{} ", Fg(Green), $category, Fg(Yellow), Fg(Reset));
+        #[cfg(debug_assertions)]
+        println!($($arg)*);
+    )
+}

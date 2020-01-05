@@ -3,6 +3,10 @@ use super::{
 };
 use std::collections::HashMap;
 
+// TODO: I actually quite dislike this code. To bloated and messy
+// Should redo sometime. But hey it does actually work quite well
+// so lets get our priorities straight for now.
+
 // Seekable is how we find which function to used when we cannot locally resolve an identifier.
 // We don't actually return the discovered function itself, but rather it's entrypoint combined
 // with the Meta object which contains some of the metadata of a function but with all generics
@@ -110,13 +114,12 @@ fn deep_cmp(
                         return false;
                     }
                 }
-                MaybeType::Infer(maybe_known) => match maybe_known.borrow().as_ref() {
-                    Some(t) => {
+                MaybeType::Infer(maybe_known) => {
+                    if let Some(t) = maybe_known.borrow().as_ref() {
                         if t != want {
                             return false;
                         }
-                    }
-                    None => {
+                    } else {
                         // TODO: This is still a match. Lets add it to valid matches but! We
                         // need to somehow mark this as *to be infered*. Or do we? We
                         // can just check the valid matches later and infer based of
@@ -124,7 +127,7 @@ fn deep_cmp(
                         // multiple equally valid matches but that can be fixed later
                         // with an *cannot infer* error.
                     }
-                },
+                }
             }
         }
     }

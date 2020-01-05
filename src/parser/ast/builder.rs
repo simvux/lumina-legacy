@@ -20,10 +20,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
     pub fn run_chunk(&mut self) -> Result<Tracked<Entity>, ParseError> {
         let t = match self.tokenizer.peek() {
             Some(t) => t,
-            None => return Err(ParseFault::EmptyParen.to_err(0)),
+            None => return Err(ParseFault::EmptyParen.into_err(0)),
         };
         match t.inner {
-            RawToken::Header(_) => Err(ParseFault::EmptyParen.to_err(t.pos())),
+            RawToken::Header(_) => Err(ParseFault::EmptyParen.into_err(t.pos())),
             RawToken::Key(Key::ParenOpen) => {
                 let paren_pos = t.pos();
                 self.tokenizer.next();
@@ -42,7 +42,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                             self.run_maybe_operator(v)
                         }
                     }
-                    _ => Err(ParseFault::Unmatched(Key::ParenOpen).to_err(paren_pos)),
+                    _ => Err(ParseFault::Unmatched(Key::ParenOpen).into_err(paren_pos)),
                 }
             }
             RawToken::Key(Key::PrimitiveUnimplemented) => {
@@ -98,7 +98,6 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 if self.lambda_should_consume_pipe() {
                     self.tokenizer.next();
                     let piped_param = self.run_chunk()?;
-                    // This is a bit hacky
 
                     let pos = v.pos();
                     if let Entity::Lambda(params, body) = v.inner {
@@ -120,7 +119,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             _ => {
                 let t = self.tokenizer.next().unwrap();
                 let pos = t.pos();
-                Err(ParseFault::Unexpected(t.inner).to_err(pos))
+                Err(ParseFault::Unexpected(t.inner).into_err(pos))
             }
         }
     }
@@ -151,10 +150,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                             RawToken::Key(Key::Arrow),
                         ],
                     )
-                    .to_err(pos))
+                    .into_err(pos))
                 }
                 None => {
-                    return Err(ParseFault::Unexpected(RawToken::Key(Key::Lambda)).to_err(0));
+                    return Err(ParseFault::Unexpected(RawToken::Key(Key::Lambda)).into_err(0));
                 }
             }
         };
@@ -201,8 +200,8 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                         other,
                         vec![RawToken::Key(Key::ParenClose)],
                     )
-                    .to_err(pos)),
-                    None => Err(ParseFault::Unmatched(Key::ParenOpen).to_err(0)),
+                    .into_err(pos)),
+                    None => Err(ParseFault::Unmatched(Key::ParenOpen).into_err(0)),
                 }
             }
             RawToken::Key(Key::Pipe) => {
@@ -236,7 +235,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 self.tokenizer.next();
                 self.run_parameterized()
             }
-            _ => Err(ParseFault::UnexpectedWantedParameter(t.inner.clone()).to_err(t.pos())),
+            _ => Err(ParseFault::UnexpectedWantedParameter(t.inner.clone()).into_err(t.pos())),
         }
     }
 
@@ -244,7 +243,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
         let (inner, pos) = match self.tokenizer.next() {
             Some(t) => t.sep(),
             None => {
-                return Err(ParseFault::Unexpected(RawToken::Key(Key::ClosureMarker)).to_err(0));
+                return Err(ParseFault::Unexpected(RawToken::Key(Key::ClosureMarker)).into_err(0));
             }
         };
         match inner {
@@ -253,9 +252,9 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 match self.tokenizer.next().map(|t| t.sep()) {
                     Some((RawToken::Key(Key::ParenClose), _)) => {}
                     Some((other, pos)) => {
-                        return Err(ParseFault::Unexpected(other).to_err(pos));
+                        return Err(ParseFault::Unexpected(other).into_err(pos));
                     }
-                    None => return Err(ParseFault::Unmatched(Key::ParenOpen).to_err(0)),
+                    None => return Err(ParseFault::Unmatched(Key::ParenOpen).into_err(0)),
                 }
                 // These are all the entities that are valid to pass as function parameter
                 let passable = match entity {
@@ -263,7 +262,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                     Entity::Lambda(identifiers, body) => Passable::Lambda(identifiers, body),
                     Entity::SingleIdent(ident) => Passable::Func(ident),
                     Entity::Call(callable, params) => Passable::PartialFunc(callable, params),
-                    _ => return Err(ParseFault::InvalidClosure(entity).to_err(pos)),
+                    _ => return Err(ParseFault::InvalidClosure(entity).into_err(pos)),
                 };
                 Ok(Tracked::new(passable).set(pos))
             }
@@ -273,7 +272,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 Ok(v)
             }
             RawToken::Inlined(inlinable) => Ok(Tracked::new(Passable::Value(inlinable)).set(pos)),
-            _ => Err(ParseFault::InvalidClosureT(inner).to_err(pos)),
+            _ => Err(ParseFault::InvalidClosureT(inner).into_err(pos)),
         }
     }
 
@@ -325,7 +324,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                     // We don't need to run_maybe_operator here because run_operator already does that
                     self.run_operator(left, Tracked::new(ident).set(pos))
                 } else {
-                    Err(ParseFault::Unexpected(t.inner.clone()).to_err(t.pos()))
+                    Err(ParseFault::Unexpected(t.inner.clone()).into_err(t.pos()))
                 }
             }
             _ => Ok(left),
@@ -351,12 +350,12 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             '_inner: loop {
                 let (after, pos) = match self.tokenizer.next() {
                     Some(v) => v.sep(),
-                    None => return Err(ParseFault::IfMissingThen.to_err(0)),
+                    None => return Err(ParseFault::IfMissingThen.into_err(0)),
                 };
                 match after {
                     RawToken::Key(Key::Then) => break '_inner,
                     RawToken::NewLine => continue '_inner,
-                    _ => return Err(ParseFault::IfWantedThen(after).to_err(pos)),
+                    _ => return Err(ParseFault::IfWantedThen(after).into_err(pos)),
                 }
             }
             let eval = self.run_chunk()?;
@@ -364,7 +363,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
 
             'inner: loop {
                 let (after, pos) = match self.tokenizer.next() {
-                    None => return Err(ParseFault::IfMissingThen.to_err(0)),
+                    None => return Err(ParseFault::IfMissingThen.into_err(0)),
                     Some(v) => v.sep(),
                 };
                 match after {
@@ -379,7 +378,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                             after,
                             vec![RawToken::Key(Key::Elif), RawToken::Key(Key::Else)],
                         )
-                        .to_err(pos));
+                        .into_err(pos));
                     }
                 }
             }
@@ -401,7 +400,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             'inner: loop {
                 let (after, pos) = match self.tokenizer.next() {
                     Some(t) => t.sep(),
-                    None => return Err(ParseFault::FirstMissingThen.to_err(0)),
+                    None => return Err(ParseFault::FirstMissingThen.into_err(0)),
                 };
                 match after {
                     RawToken::Key(Key::And) => continue 'outer,
@@ -410,7 +409,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                         last = true;
                         break 'inner;
                     }
-                    _ => return Err(ParseFault::FirstWantedThen(after).to_err(pos)),
+                    _ => return Err(ParseFault::FirstWantedThen(after).into_err(pos)),
                 }
             }
         }
@@ -442,9 +441,9 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                         other,
                         vec![RawToken::Key(Key::Comma), RawToken::Key(Key::ListClose)],
                     )
-                    .to_err(pos))
+                    .into_err(pos))
                 }
-                None => return Err(ParseFault::Unmatched(Key::ListOpen).to_err(0)),
+                None => return Err(ParseFault::Unmatched(Key::ListOpen).into_err(0)),
             }
         }
     }

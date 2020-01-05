@@ -92,6 +92,21 @@ impl FileSource {
             false
         }
     }
+
+    // Create a new FileSource from the scope of self
+    // We search for filepath both from $LEAFPATH and relatively from entrypoint
+    pub fn fork_from(&self, ident: Identifier, env: &Environment) -> Self {
+        if self.is_entrypoint() {
+            FileSource::try_from((&ident, env)).unwrap()
+        } else {
+            let mut new_module_path = self.clone();
+            new_module_path.pop();
+            for level in ident.path.into_iter() {
+                new_module_path = new_module_path.join(level);
+            }
+            new_module_path
+        }
+    }
 }
 
 impl fmt::Display for FileSource {

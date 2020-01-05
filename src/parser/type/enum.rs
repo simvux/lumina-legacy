@@ -73,7 +73,7 @@ fn parse_type_arguments<I: Iterator<Item = char>>(
             Some(RawToken::Identifier(_)) => {
                 let (type_param_type_name, pos) = assume!(RawToken::Identifier, tokenizer.next());
                 let t = Type::try_from(type_param_type_name.name.as_str())
-                    .map_err(|e| e.to_err(pos))?;
+                    .map_err(|e| e.into_err(pos))?;
                 buf.push(t);
             }
             Some(other) => panic!("ET: Unexpected {:?}", other),

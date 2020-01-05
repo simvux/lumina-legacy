@@ -129,15 +129,17 @@ pub enum ParseFault {
     IfMissingThen,
     IfWantedThen(RawToken),
     IfDoubleElse,
-    IfConditionNotBoolean(ast::Entity, Type),
+    IfConditionNotBoolean(Box<(ast::Entity, Type)>),
     ParamCallMismatch(Box<(Vec<Type>, Type, Vec<MaybeType>)>),
     ParamCallAmountMismatch(Box<(Vec<Type>, Type, Vec<MaybeType>)>),
     IfBranchTypeMismatch(
-        Vec<Type>,
-        (
-            Vec<(Tracked<ast::Entity>, Tracked<ast::Entity>)>,
-            Tracked<ast::Entity>,
-        ),
+        Box<(
+            Vec<Type>,
+            (
+                Vec<(Tracked<ast::Entity>, Tracked<ast::Entity>)>,
+                Tracked<ast::Entity>,
+            ),
+        )>,
     ),
     ListMissingClose,
     OpNoIdent,
@@ -162,23 +164,13 @@ pub enum IdentSource {
 }
 
 impl<'a> ParseFault {
-    pub fn to_err(self, i: usize) -> ParseError {
+    pub fn into_err(self, i: usize) -> ParseError {
         ParseError::new(i, self)
     }
 }
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        /*
-        let parser = self
-            .parser
-            .as_ref()
-            .expect("Parser not appended to error in final scope");
-        let source = self
-            .source_code
-            .as_ref()
-            .expect("Source code not appended to error in final scope");
-        */
         let parser = if let Some(parser) = self.parser.as_ref() {
             if let Some(source) = self.source_code.as_ref() {
                 if self.source_index != 0 {
@@ -405,8 +397,8 @@ impl fmt::Display for ParseError {
             IfWantedThen(got) => write!(f, "This if expression was expecting a `then` branch but instead it got `{}`\nI was looking for something ressembling\n if ...\n  then ...\n  else ...", got),
             IfMissingElse => write!(f, "This if expression doesn't have an `else` branch, I was looking for something ressembling\n if ...\n  then ...\n  else ..."),
             IfDoubleElse => write!(f, "This if expression has two `else` branches, how would I know which one to use?"),
-            IfConditionNotBoolean(_got, gott) => write!(f, "The condition for this if branch isn't an boolean\n Wanted `bool` but got `{}`", gott),
-            IfBranchTypeMismatch(types, (branches, else_do)) => write!(f, "ERROR TODO: Properly display if statement typing.\n These branches don't return the same value\n{:?}", types),
+            IfConditionNotBoolean(box (_got, gott)) => write!(f, "The condition for this if branch isn't an boolean\n Wanted `bool` but got `{}`", gott),
+            IfBranchTypeMismatch(box (types, (branches, else_do))) => write!(f, "ERROR TODO: Properly display if statement typing.\n These branches don't return the same value\n{:?}", types),
             ListMissingClose => write!(f, "This list open is missing a matching `]` to close it"),
             OpNoIdent => write!(f, "You need to provide an identifier for this operator"),
             OpWantedIdent(a) => write!(f, "Wanted identifier for the operator but got `{}`", a),

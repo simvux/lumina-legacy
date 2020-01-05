@@ -72,7 +72,7 @@ fn parse_field<I: Iterator<Item = char>>(
             let (second, pos) = tokenizer.next().ok_or_else(|| panic!("ET"))?.sep();
             if let RawToken::Identifier(field_type_ident) = second {
                 let t =
-                    Type::try_from(field_type_ident.name.as_str()).map_err(|e| e.to_err(pos))?;
+                    Type::try_from(field_type_ident.name.as_str()).map_err(|e| e.into_err(pos))?;
                 Ok(Some((field_name_ident.name, t)))
             } else {
                 panic!("ET {:?} cannot be used as field type", second);

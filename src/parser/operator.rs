@@ -10,7 +10,7 @@ impl FunctionBuilder {
         tokenizer: &mut Tokenizer<I>,
     ) -> Result<Self, ParseError> {
         let first = match tokenizer.next() {
-            None => return ParseFault::OpNoIdent.to_err(0).into(),
+            None => return ParseFault::OpNoIdent.into_err(0).into(),
             Some(t) => t,
         };
         match first.inner {
@@ -23,7 +23,7 @@ impl FunctionBuilder {
             _ => {
                 let source_index = first.pos();
                 return ParseFault::OpWantedIdent(first.inner)
-                    .to_err(source_index)
+                    .into_err(source_index)
                     .into();
             }
         };
@@ -37,7 +37,7 @@ impl FunctionBuilder {
         let t = match tokenizer.next() {
             None => {
                 return ParseFault::EndedWhileExpecting(vec![RawToken::Key(Key::ParenOpen)])
-                    .to_err(0)
+                    .into_err(0)
                     .into()
             }
             Some(t) => t,
@@ -47,7 +47,7 @@ impl FunctionBuilder {
             _ => {
                 let source_index = t.pos();
                 return ParseFault::GotButExpected(t.inner, vec![RawToken::Key(Key::ParenOpen)])
-                    .to_err(source_index)
+                    .into_err(source_index)
                     .into();
             }
         }

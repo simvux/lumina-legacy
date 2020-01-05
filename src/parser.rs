@@ -1,6 +1,5 @@
 use crate::env::Environment;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
@@ -199,7 +198,7 @@ impl Parser {
                                 return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
                                     Identifier::raw("identifier"),
                                 )])
-                                .to_err(tokenizer.position - 1)
+                                .into_err(tokenizer.position - 1)
                                 .into()
                             }
                             Some(other) => {
@@ -207,37 +206,12 @@ impl Parser {
                             }
                         };
 
-                        // We search for filepath both from $LEAFPATH and relatively from entrypoint
-                        let file_path = {
-                            if module_path.is_entrypoint() {
-                                leafmod::FileSource::try_from((&ident, &*self.environment)).unwrap()
-                            } else {
-                                let mut new_module_path = module_path.clone();
-                                new_module_path.pop();
-                                for level in ident.path.into_iter() {
-                                    new_module_path = new_module_path.join(level);
-                                }
-                                new_module_path
-                            }
-                        };
+                        let file_path = module_path.fork_from(ident.clone(), &*self.environment);
 
-                        let pathbuf = file_path.to_pathbuf(&self.environment);
-                        let mut source_code = String::with_capacity(20);
-                        File::open(pathbuf.clone())
-                            .map_err(|e| {
-                                ParseFault::ModuleLoadFailed(pathbuf.clone(), e.kind())
-                                    .to_err(source_index)
-                            })?
-                            .read_to_string(&mut source_code)
-                            .map_err(|e| {
-                                ParseFault::ModuleLoadFailed(pathbuf, e.kind()).to_err(source_index)
-                            })?;
+                        let usefid = self
+                            .tokenize_import(file_path)
+                            .map_err(|e| e.fallback_fid(fid).fallback_index(source_index))?;
 
-                        // Fork and tokenize this module first instead.
-                        let usefid = match self.tokenize(file_path.clone(), source_code.chars()) {
-                            Err(e) => return Err(e.fallback_fid(fid).fallback_index(source_index)),
-                            Ok(fid) => fid,
-                        };
                         // `usefid` is the ID which was assigned,
                         // it's already been inserted as a module in the parser
                         // but we need to add it to *this* modules imports.
@@ -253,6 +227,7 @@ impl Parser {
                             token.inner,
                             vec![
                                 RawToken::Header(Header::Function),
+                                RawToken::Header(Header::Enum),
                                 RawToken::Header(Header::Type),
                                 RawToken::Header(Header::Operator),
                             ],
@@ -262,6 +237,19 @@ impl Parser {
                 }
             }
         }
+    }
+
+    fn tokenize_import(&mut self, file_path: FileSource) -> Result<usize, ParseError> {
+        let pathbuf = file_path.to_pathbuf(&self.environment);
+        let mut source_code = String::with_capacity(20);
+        File::open(pathbuf.clone())
+            .map_err(|e| ParseFault::ModuleLoadFailed(pathbuf.clone(), e.kind()).into_err(0))?
+            .read_to_string(&mut source_code)
+            .map_err(|e| ParseFault::ModuleLoadFailed(pathbuf, e.kind()).into_err(0))?;
+
+        // Fork and tokenize this module first instead.
+        let usefid = self.tokenize(file_path, source_code.chars())?;
+        Ok(usefid)
     }
 
     pub fn variants_including_prelude(
@@ -305,9 +293,6 @@ impl fmt::Debug for Parser {
             .module_ids
             .iter()
             .map(|(mod_name, fid)| {
-                //if *fid == PRELUDE_FID {
-                //    String::new()
-                // } else {
                 format!(
                     "{}#{} {} {}\n{:?}",
                     Fg(color::Green),

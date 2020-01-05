@@ -4,18 +4,6 @@ use crate::parser::{ast, Identifier, Inlinable, MaybeType, ParseError, ParseFaul
 
 use super::{Identifiable, Meta};
 
-#[allow(unused_imports)]
-use termion::color::{Fg, Green, Reset, Yellow};
-#[allow(unused)]
-macro_rules! debug {
-    ($($arg:tt)*) => (
-        #[cfg(debug_assertions)]
-        print!(" {}checker {}->{} ", Fg(Green), Fg(Yellow), Fg(Reset));
-        #[cfg(debug_assertions)]
-        println!($($arg)*);
-    )
-}
-
 impl<'a> IrBuilder {
     pub fn find_and_build_function(
         &'a self,
@@ -26,7 +14,7 @@ impl<'a> IrBuilder {
         let (entry, meta) = self
             .parser
             .find_func((self_fid, name, params.as_slice()))
-            .map_err(|e| e.to_err(0))?;
+            .map_err(|e| e.into_err(0))?;
         if self.is_completed(&meta) {
             let findex = self.gen_id(&meta);
             return Ok((meta.return_type.clone(), findex));
@@ -45,7 +33,7 @@ impl<'a> IrBuilder {
         let (variants, fid) = self
             .parser
             .variants_including_prelude(self_fid, ident)
-            .map_err(|e| e.to_err(0))?;
+            .map_err(|e| e.into_err(0))?;
         let funcid = match variants.len() {
             1 => match &ident.anot {
                 Some(anot) => variants.get(anot.as_slice()).ok_or_else(|| {
@@ -53,11 +41,11 @@ impl<'a> IrBuilder {
                         ident.clone(),
                         anot.iter()
                             .cloned()
-                            .map(|t| MaybeType::Known(t))
+                            .map(MaybeType::Known)
                             .collect::<Vec<_>>(),
                         fid,
                     )
-                    .to_err(0)
+                    .into_err(0)
                 })?,
                 None => variants.values().next().unwrap(),
             },
@@ -67,18 +55,18 @@ impl<'a> IrBuilder {
                         ident.clone(),
                         anot.iter()
                             .cloned()
-                            .map(|t| MaybeType::Known(t))
+                            .map(MaybeType::Known)
                             .collect::<Vec<_>>(),
                         fid,
                     )
-                    .to_err(0)
+                    .into_err(0)
                 })?,
                 None => {
                     return Err(ParseFault::FunctionConversionRequiresAnnotation(
                         ident.clone(),
                         variants.clone(),
                     )
-                    .to_err(0))
+                    .into_err(0))
                 }
             },
         };
@@ -118,7 +106,7 @@ impl<'a> IrBuilder {
         let (t, ir) = self.build(entry, &mut meta)?;
         let t = t.unwrap();
         if meta.return_type != Type::Nothing && t != meta.return_type {
-            return Err(ParseFault::FnTypeReturnMismatch(Box::new(meta), t).to_err(entry.pos()));
+            return Err(ParseFault::FnTypeReturnMismatch(Box::new(meta), t).into_err(entry.pos()));
         }
 
         self.complete(findex, ir);
@@ -168,14 +156,14 @@ impl<'a> IrBuilder {
                                             return Err(ParseFault::ParamCallAmountMismatch(
                                                 Box::new((takes, gives, param_types)),
                                             )
-                                            .to_err(token.pos())
+                                            .into_err(token.pos())
                                             .fallback_fid(meta.fid));
                                         }
                                         if takes.len() != param_types.len() {
                                             return Err(ParseFault::ParamCallAmountMismatch(
                                                 Box::new((takes, gives, param_types)),
                                             )
-                                            .to_err(token.pos())
+                                            .into_err(token.pos())
                                             .fallback_fid(meta.fid));
                                         }
                                         for (i, take) in takes.iter().enumerate() {
@@ -183,7 +171,7 @@ impl<'a> IrBuilder {
                                                 return Err(ParseFault::ParamCallMismatch(
                                                     Box::new((takes, gives, param_types)),
                                                 )
-                                                .to_err(token.pos())
+                                                .into_err(token.pos())
                                                 .fallback_fid(meta.fid));
                                             }
                                         }
@@ -196,7 +184,7 @@ impl<'a> IrBuilder {
                                             r#type,
                                             param_types,
                                         )))
-                                        .to_err(token.pos())
+                                        .into_err(token.pos())
                                         .fallback_fid(meta.fid))
                                     }
                                 }
@@ -217,7 +205,7 @@ impl<'a> IrBuilder {
                     }
                     ast::Callable::Builtin(ident) => {
                         let (id, nt) = ir::bridge::get_funcid(&ident.name)
-                            .map_err(|e| e.to_err(token.pos()).fallback_fid(meta.fid))?;
+                            .map_err(|e| e.into_err(token.pos()).fallback_fid(meta.fid))?;
                         let mt = match nt {
                             ir::bridge::NaiveType::Known(t) => MaybeType::Known(t),
                             ir::bridge::NaiveType::Matching(i) => param_types[i as usize].clone(),
@@ -326,7 +314,6 @@ impl<'a> IrBuilder {
             ast::Entity::SingleIdent(ident) => match meta.try_use(&ident.name) {
                 Some(found) => match found.ident {
                     Identifiable::Param(id) => {
-                        // TODO: Handle FunctionParam
                         if let MaybeType::Known(Type::Function(box (takes, gives))) = &found.r#type
                         {
                             if !takes.is_empty() {
@@ -335,7 +322,7 @@ impl<'a> IrBuilder {
                                     gives.clone(),
                                     Vec::new(),
                                 )))
-                                .to_err(token.pos())
+                                .into_err(token.pos())
                                 .fallback_fid(meta.fid));
                             }
                             return Ok((
@@ -362,7 +349,7 @@ impl<'a> IrBuilder {
                             } else {
                                 e
                             }
-                            .to_err(token.pos())
+                            .into_err(token.pos())
                             .fallback_fid(meta.fid)
                         })?;
                     let (t, findex) = self.build_function(meta, &entry)?;
@@ -373,7 +360,7 @@ impl<'a> IrBuilder {
                 }
             },
             ast::Entity::Lambda(_, _) => Err(ParseFault::ParameterlessLambda
-                .to_err(token.pos())
+                .into_err(token.pos())
                 .fallback_fid(meta.fid)),
         }
     }
@@ -393,7 +380,7 @@ impl<'a> IrBuilder {
                 Some(expected) => {
                     if t != *expected {
                         return Err(ParseFault::ListEntryTypeMismatch(t, expected.clone(), i)
-                            .to_err(branch.pos())
+                            .into_err(branch.pos())
                             .fallback_fid(meta.fid));
                     }
                 }
@@ -423,10 +410,14 @@ impl<'a> IrBuilder {
         for (cond, eval) in branches.iter() {
             let (t, v) = self.build(cond, meta)?;
             let t = t.unwrap();
+
+            // The conditional needs to be a bool
             if t != Type::Bool {
-                return Err(ParseFault::IfConditionNotBoolean(cond.clone().inner, t)
-                    .to_err(cond.pos())
-                    .fallback_fid(meta.fid));
+                return Err(
+                    ParseFault::IfConditionNotBoolean(Box::new((cond.clone().inner, t)))
+                        .into_err(cond.pos())
+                        .fallback_fid(meta.fid),
+                );
             }
             buf.push(v);
             let (t, v) = self.build(eval, meta)?;
@@ -434,17 +425,19 @@ impl<'a> IrBuilder {
             buf.push(v);
         }
         branch_types.push(else_t.unwrap());
+
+        // Verify that all the branches are the same type
         if branch_types.iter().all(|t| *t == branch_types[0]) {
             Ok((
                 MaybeType::Known(branch_types.remove(0)),
                 ir::Entity::IfExpression(ir::If::from(buf)),
             ))
         } else {
-            Err(ParseFault::IfBranchTypeMismatch(
+            Err(ParseFault::IfBranchTypeMismatch(Box::new((
                 branch_types,
                 (branches.to_vec(), else_do.clone()),
-            )
-            .to_err(0)
+            )))
+            .into_err(0)
             .fallback_fid(meta.fid))
         }
     }
