@@ -1,4 +1,5 @@
 pub mod bridge;
+use bridge::Bridged;
 mod r#if;
 pub use r#if::If;
 mod first;
@@ -10,7 +11,7 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum Entity {
-    RustCall(u16, Vec<Entity>),
+    RustCall(Bridged, Vec<Entity>),
     FunctionCall(u32, Vec<Entity>),
     ParameterCall(u32, Vec<Entity>),
     IfExpression(self::If<Entity>),

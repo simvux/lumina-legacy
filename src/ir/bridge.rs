@@ -1,8 +1,9 @@
 use crate::parser::{Identifier, ParseFault, Type};
 use std::convert::TryFrom;
 use std::fmt;
+use strum_macros::{AsRefStr, EnumString};
 
-pub fn try_rust_builtin(entries: &[String]) -> Result<Option<(u16, NaiveType)>, ParseFault> {
+pub fn try_rust_builtin(entries: &[String]) -> Result<Option<(Bridged, NaiveType)>, ParseFault> {
     if &entries[0] == "rust" {
         Ok(Some(get_funcid(&entries[1])?))
     } else {
@@ -23,23 +24,45 @@ pub enum NaiveType {
     UnlistedMatching(u16),
 }
 
-pub fn get_funcid(ident: &str) -> Result<(u16, NaiveType), ParseFault> {
+#[allow(non_camel_case_types)]
+#[repr(u16)]
+#[derive(EnumString, AsRefStr, Debug, Clone, Copy)]
+pub enum Bridged {
+    add,
+    sub,
+    mul,
+    div,
+    push_back,
+    push_front,
+    get,
+    len,
+    eq,
+    lt,
+    steal,
+    remove,
+    print_any,
+    map_overwrite,
+    append,
+}
+use Bridged::*;
+
+pub fn get_funcid(ident: &str) -> Result<(Bridged, NaiveType), ParseFault> {
     let id = match ident {
-        "add" => (0, NaiveType::Matching(0)),
-        "sub" => (1, NaiveType::Matching(0)),
-        "mul" => (2, NaiveType::Matching(0)),
-        "div" => (3, NaiveType::Matching(0)),
-        "push_back" => (4, NaiveType::Matching(1)),
-        "push_front" => (5, NaiveType::Matching(1)),
-        "get" => (6, NaiveType::UnlistedMatching(1)),
-        "len" => (7, NaiveType::Known(Type::Int)),
-        "eq" => (8, NaiveType::Known(Type::Bool)),
-        "lt" => (9, NaiveType::Known(Type::Bool)),
-        "steal" => (10, NaiveType::Matching(1)),
-        "remove" => (11, NaiveType::Matching(1)),
-        "print_any" => (12, NaiveType::Known(Type::Nothing)),
-        "map_overwrite" => (13, NaiveType::Matching(1)),
-        "append" => (14, NaiveType::Matching(0)),
+        "add" => (add, NaiveType::Matching(0)),
+        "sub" => (sub, NaiveType::Matching(0)),
+        "mul" => (mul, NaiveType::Matching(0)),
+        "div" => (div, NaiveType::Matching(0)),
+        "push_back" => (push_back, NaiveType::Matching(1)),
+        "push_front" => (push_front, NaiveType::Matching(1)),
+        "get" => (get, NaiveType::UnlistedMatching(1)),
+        "len" => (len, NaiveType::Known(Type::Int)),
+        "eq" => (eq, NaiveType::Known(Type::Bool)),
+        "lt" => (lt, NaiveType::Known(Type::Bool)),
+        "steal" => (steal, NaiveType::Matching(1)),
+        "remove" => (remove, NaiveType::Matching(1)),
+        "print_any" => (print_any, NaiveType::Known(Type::Nothing)),
+        "map_overwrite" => (map_overwrite, NaiveType::Matching(1)),
+        "append" => (append, NaiveType::Matching(0)),
         _ => {
             return Err(ParseFault::BridgedFunctionNotFound(
                 Identifier::try_from(ident).unwrap(),
@@ -49,23 +72,6 @@ pub fn get_funcid(ident: &str) -> Result<(u16, NaiveType), ParseFault> {
     Ok(id)
 }
 
-pub fn name_from_funcid(f: &mut fmt::Formatter, n: u16) -> fmt::Result {
-    match n {
-        0 => write!(f, "add"),
-        1 => write!(f, "sub"),
-        2 => write!(f, "mul"),
-        3 => write!(f, "div"),
-        4 => write!(f, "push_back"),
-        5 => write!(f, "push_front"),
-        6 => write!(f, "get"),
-        7 => write!(f, "len"),
-        8 => write!(f, "eq"),
-        9 => write!(f, "lt"),
-        10 => write!(f, "steal"),
-        11 => write!(f, "remove"),
-        12 => write!(f, "print_any"),
-        13 => write!(f, "map_overwrite"),
-        14 => write!(f, "append"),
-        _ => write!(f, "ERROR_UNEXISTENT_BUILTIN_{}", n),
-    }
+pub fn name_from_funcid(f: &mut fmt::Formatter, func: Bridged) -> fmt::Result {
+    write!(f, "{}", func.as_ref())
 }

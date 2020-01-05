@@ -1,5 +1,6 @@
 use super::ParamBuffer;
 use super::Runner;
+use crate::ir::bridge::Bridged;
 use crate::ir::Value;
 
 macro_rules! calc {
@@ -19,28 +20,28 @@ macro_rules! calc {
 }
 
 impl<'p> Runner<'p> {
-    pub fn eval_bridged(self, index: u16) -> Value {
+    pub fn eval_bridged(self, func: Bridged) -> Value {
         // let (x, y) = (self.params.clone_param(0), self.params.clone_param(1));
-        match index {
-            0 => calc!(+, self.params.borrow_param(0), self.params.borrow_param(1)),
-            1 => calc!(-, self.params.borrow_param(0), self.params.borrow_param(1)),
-            2 => calc!(*, self.params.borrow_param(0), self.params.borrow_param(1)),
-            3 => calc!(/, self.params.borrow_param(0), self.params.borrow_param(1)),
-            4 => {
+        match func {
+            Bridged::add => calc!(+, self.params.borrow_param(0), self.params.borrow_param(1)),
+            Bridged::sub => calc!(-, self.params.borrow_param(0), self.params.borrow_param(1)),
+            Bridged::mul => calc!(*, self.params.borrow_param(0), self.params.borrow_param(1)),
+            Bridged::div => calc!(/, self.params.borrow_param(0), self.params.borrow_param(1)),
+            Bridged::push_back => {
                 if let Value::List(mut list) = self.params.clone_param(1) {
                     list.push_back(self.params.clone_param(0));
                     return Value::List(list);
                 }
                 unreachable!();
             }
-            5 => {
+            Bridged::push_front => {
                 if let Value::List(mut list) = self.params.clone_param(1) {
                     list.push_front(self.params.clone_param(0));
                     return Value::List(list);
                 }
                 unreachable!();
             }
-            6 => {
+            Bridged::get => {
                 if let Value::List(list) = self.params.borrow_param(1) {
                     if let Value::Int(i) = self.params.clone_param(0) {
                         return list[i as usize].clone();
@@ -48,7 +49,7 @@ impl<'p> Runner<'p> {
                 }
                 unreachable!();
             }
-            7 => {
+            Bridged::len => {
                 if let Value::List(list) = self.params.borrow_param(0) {
                     Value::Int(list.len() as i64)
                 } else {
@@ -58,9 +59,9 @@ impl<'p> Runner<'p> {
             }
             // TODO: This should be reimplemented in Leaf when we have a stronger type system
             // or should it?
-            8 => Value::Bool(self.params.borrow_param(0) == self.params.borrow_param(1)),
-            9 => Value::Bool(self.params.borrow_param(0) < self.params.borrow_param(1)),
-            10 => {
+            Bridged::eq => Value::Bool(self.params.borrow_param(0) == self.params.borrow_param(1)),
+            Bridged::lt => Value::Bool(self.params.borrow_param(0) < self.params.borrow_param(1)),
+            Bridged::steal => {
                 if let Value::List(mut list) = self.params.clone_param(1) {
                     if let Value::Int(i) = self.params.borrow_param(0) {
                         return list.remove(*i as usize).unwrap();
@@ -68,7 +69,7 @@ impl<'p> Runner<'p> {
                 }
                 unreachable!();
             }
-            11 => {
+            Bridged::remove => {
                 if let Value::List(mut list) = self.params.clone_param(1) {
                     if let Value::Int(i) = self.params.borrow_param(0) {
                         list.remove(*i as usize);
@@ -77,11 +78,11 @@ impl<'p> Runner<'p> {
                 }
                 unreachable!();
             }
-            12 => {
+            Bridged::print_any => {
                 println!("{}", self.params.borrow_param(0));
                 Value::Nothing
             }
-            13 => {
+            Bridged::map_overwrite => {
                 // TODO: This implementation is temporary. The cloning here is obviously bad.
                 if let Value::List(mut list) = self.params.clone_param(1) {
                     if let Value::Function(box (action, captured)) = self.params.clone_param(0) {
@@ -98,7 +99,7 @@ impl<'p> Runner<'p> {
                 }
                 unreachable!();
             }
-            14 => {
+            Bridged::append => {
                 if let Value::List(mut list) = self.params.clone_param(0) {
                     if let Value::List(mut addition) = self.params.clone_param(1) {
                         list.append(&mut addition);
@@ -107,7 +108,6 @@ impl<'p> Runner<'p> {
                 }
                 unreachable!();
             }
-            _ => unreachable!(),
         }
     }
 }

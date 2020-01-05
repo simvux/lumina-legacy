@@ -1,5 +1,5 @@
 use super::runtime::Runtime;
-use crate::ir::{Capturable, Entity, First, If, Value};
+use crate::ir::{bridge::Bridged, Capturable, Entity, First, If, Value};
 use std::collections::VecDeque;
 
 mod bridge;
@@ -133,7 +133,7 @@ impl<'a> Runner<'a> {
         }
     }
 
-    fn rust_call(mut self, index: u16, rust_params: &'a [Entity]) -> Value {
+    fn rust_call(mut self, index: Bridged, rust_params: &'a [Entity]) -> Value {
         self.params = self.eval_params(rust_params);
         self.eval_bridged(index)
     }

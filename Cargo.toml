@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 termion = "*"
 smallvec = { version = "*", features = ["union"] }
+strum = "*"
+strum_macros = "*"
