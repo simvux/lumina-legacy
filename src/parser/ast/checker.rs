@@ -8,7 +8,7 @@ impl<'a> IrBuilder {
     pub fn find_and_build_function(
         &'a self,
         self_fid: usize,
-        name: &Identifier,
+        name: &Identifier<Type>,
         params: &mut Vec<MaybeType>,
     ) -> Result<(Type, usize), ParseError> {
         let (entry, meta) = self
@@ -28,7 +28,7 @@ impl<'a> IrBuilder {
     pub fn find_and_build_only_suitable(
         &'a self,
         self_fid: usize,
-        ident: &Identifier,
+        ident: &Identifier<Type>,
     ) -> Result<(Type, &[Type], usize), ParseError> {
         let (variants, fid) = self
             .parser

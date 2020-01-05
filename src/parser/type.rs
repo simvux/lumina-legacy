@@ -23,7 +23,7 @@ pub enum Type {
     List(Box<Type>),
     Struct(i32, i32),
     Function(Box<(Vec<Type>, Type)>),
-    Custom(Identifier),
+    Custom(Identifier<Type>),
 }
 
 pub enum CustomType {
@@ -190,7 +190,13 @@ pub fn annotation<I: Iterator<Item = char>>(iter: &mut I) -> Option<Vec<Type>> {
                 }
                 _ => unreachable!(),
             },
-            None => panic!("ET: Annotation missing `>`"),
+            None => {
+                if annotations.is_empty() {
+                    return Some(Vec::new());
+                } else {
+                    panic!("ET: Annotation missing `>`")
+                }
+            }
         }
     }
 }

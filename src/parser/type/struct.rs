@@ -23,7 +23,7 @@ impl fmt::Display for Struct {
 
 pub fn parse<I: Iterator<Item = char>>(
     tokenizer: &mut Tokenizer<I>,
-) -> Result<(Identifier, HashMap<String, Type>), ParseError> {
+) -> Result<(Identifier<Type>, HashMap<String, Type>), ParseError> {
     let first = tokenizer.next().ok_or_else(|| panic!("ET"))?;
     let type_ident = if let RawToken::Identifier(ident) = first.inner {
         ident

@@ -95,7 +95,7 @@ impl FileSource {
 
     // Create a new FileSource from the scope of self
     // We search for filepath both from $LEAFPATH and relatively from entrypoint
-    pub fn fork_from(&self, ident: Identifier, env: &Environment) -> Self {
+    pub fn fork_from(&self, ident: Identifier<Type>, env: &Environment) -> Self {
         if self.is_entrypoint() {
             FileSource::try_from((&ident, env)).unwrap()
         } else {
@@ -119,10 +119,12 @@ impl fmt::Display for FileSource {
     }
 }
 
-impl TryFrom<(&Identifier, &Environment)> for FileSource {
+impl TryFrom<(&Identifier<Type>, &Environment)> for FileSource {
     type Error = ();
 
-    fn try_from((ident, env): (&Identifier, &Environment)) -> Result<FileSource, Self::Error> {
+    fn try_from(
+        (ident, env): (&Identifier<Type>, &Environment),
+    ) -> Result<FileSource, Self::Error> {
         let mut from_project_path = env.entrypoint.parent().unwrap().to_owned();
 
         let mut file_postfix = ident.path.join("/");

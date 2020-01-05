@@ -1,5 +1,5 @@
 use crate::parser::ast::Identifier;
-use crate::parser::Tracked;
+use crate::parser::{Tracked, Type};
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -30,6 +30,7 @@ impl TryFrom<&str> for RawToken {
         } else if bytes == "\n" {
             Ok(RawToken::NewLine)
         } else {
+            dbg!(&bytes);
             Ok(RawToken::Identifier(Identifier::try_from(bytes)?))
         }
     }
@@ -43,7 +44,7 @@ pub struct Capture {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum RawToken {
-    Identifier(Identifier),
+    Identifier(Identifier<Type>),
 
     Header(Header),
     Key(Key),

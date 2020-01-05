@@ -75,7 +75,12 @@ impl Parser {
         };
         funcid
     }
-    fn new_type(&mut self, fid: usize, ident: Identifier, fields: HashMap<String, Type>) -> usize {
+    fn new_type(
+        &mut self,
+        fid: usize,
+        ident: Identifier<Type>,
+        fields: HashMap<String, Type>,
+    ) -> usize {
         let module = &mut self.modules[fid];
         let typeid = module.types.len();
         let (name, type_args) = {
@@ -91,7 +96,7 @@ impl Parser {
     fn new_enum(
         &mut self,
         fid: usize,
-        ident: Identifier,
+        ident: Identifier<Type>,
         fields: HashMap<String, Vec<Type>>,
     ) -> usize {
         let module = &mut self.modules[fid];
@@ -196,7 +201,7 @@ impl Parser {
                             Some(RawToken::Identifier(ident)) => ident,
                             None => {
                                 return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
-                                    Identifier::raw("identifier"),
+                                    Identifier::raw("Identifier"),
                                 )])
                                 .into_err(tokenizer.position - 1)
                                 .into()
@@ -255,7 +260,7 @@ impl Parser {
     pub fn variants_including_prelude(
         &self,
         self_fid: usize,
-        ident: &Identifier,
+        ident: &Identifier<Type>,
     ) -> Result<(&HashMap<Vec<Type>, usize>, usize), ParseFault> {
         let fid = {
             match ident.path.len() {

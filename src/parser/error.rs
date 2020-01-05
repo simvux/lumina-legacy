@@ -111,7 +111,7 @@ pub enum ParseFault {
     InvalidIdentifier(String, IdentSource),
     InvalidPath(Vec<String>),
     BridgedWrongPathLen(Vec<String>),
-    BridgedFunctionNotFound(Identifier),
+    BridgedFunctionNotFound(Identifier<Type>),
     BridgedFunctionNoMode(u8),
     ParameterlessLambda,
     Unexpected(RawToken),
@@ -149,9 +149,12 @@ pub enum ParseFault {
     EmptyListType,
     ListEntryTypeMismatch(Type, Type, usize),
     FnTypeReturnMismatch(Box<ast::Meta>, Type),
-    FunctionNotFound(Identifier, usize),
-    FunctionVariantNotFound(Identifier, Vec<MaybeType>, usize),
-    FunctionConversionRequiresAnnotation(Identifier, std::collections::HashMap<Vec<Type>, usize>),
+    FunctionNotFound(Identifier<Type>, usize),
+    FunctionVariantNotFound(Identifier<Type>, Vec<MaybeType>, usize),
+    FunctionConversionRequiresAnnotation(
+        Identifier<Type>,
+        std::collections::HashMap<Vec<Type>, usize>,
+    ),
     IdentifierNotFound(String),
     Internal,
 }
@@ -452,7 +455,7 @@ fn format_function_parameter<A: fmt::Display, B: fmt::Display>(
 }
 
 fn format_header(
-    name: &Identifier,
+    name: &Identifier<Type>,
     params: Option<&[MaybeType]>,
     returns: Option<&Type>,
 ) -> String {

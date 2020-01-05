@@ -1,7 +1,7 @@
 use super::{Callable, Entity, Passable};
 use crate::parser::tokenizer::TokenSource;
 use crate::parser::{
-    Identifier, IdentifierType, Key, ParseError, ParseFault, RawToken, Tokenizer, Tracked,
+    Identifier, IdentifierType, Key, ParseError, ParseFault, RawToken, Tokenizer, Tracked, Type,
 };
 use std::convert::TryInto;
 
@@ -334,7 +334,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
     fn run_operator(
         &mut self,
         left: Tracked<Entity>,
-        op: Tracked<Identifier>,
+        op: Tracked<Identifier<Type>>,
     ) -> Result<Tracked<Entity>, ParseError> {
         let right = self.run_chunk()?;
         assert!(op.inner.is_operator());

@@ -1,16 +1,15 @@
-use crate::parser::r#type;
-use crate::parser::Type;
+use crate::parser::{r#type, ParseFault, Type};
 use std::convert::TryFrom;
 use std::fmt;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug, Default)]
-pub struct Identifier {
+pub struct Identifier<A> {
     pub path: Vec<String>,
     pub name: String,
     pub kind: IdentifierType,
-    pub anot: Option<Vec<Type>>,
+    pub anot: Option<Vec<A>>,
 }
-impl fmt::Display for Identifier {
+impl<A: fmt::Display + Clone> fmt::Display for Identifier<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let anot = self
             .anot
@@ -46,15 +45,17 @@ impl Default for IdentifierType {
 const OP_CHARS: &str = "!@#$%-+*/&?{}=;<>|";
 pub const NAME_CHARS: &str = "abcdefghijklmnopqrstuvwxyz123456789_-";
 
-impl Identifier {
+impl Identifier<Type> {
     pub fn with_annotation<I: Iterator<Item = char>>(mut self, mut iter: I) -> Result<Self, ()> {
         let anot = r#type::annotation(&mut iter).expect("ET");
         let anot = if anot.is_empty() { None } else { Some(anot) };
         self.anot = anot;
         Ok(self)
     }
+}
 
-    pub fn raw(name: &str) -> Identifier {
+impl<A> Identifier<A> {
+    pub fn raw(name: &str) -> Identifier<A> {
         let fst = name.chars().next();
         let kind = if OP_CHARS.contains(|c| Some(c) == fst) {
             IdentifierType::Operator
@@ -72,12 +73,19 @@ impl Identifier {
     pub fn is_operator(&self) -> bool {
         self.kind == IdentifierType::Operator
     }
-}
 
-impl TryFrom<&str> for Identifier {
-    type Error = ();
-
-    fn try_from(s: &str) -> Result<Identifier, Self::Error> {
+    fn base_from<I: Iterator<Item = char>>(source: &mut I) -> Result<Identifier<A>, ()> {
+        let mut s = source
+            .take_while(|&c| c != '<' && c != ' ')
+            .collect::<String>();
+        // Edge-case for operators that start with `<`
+        if s.is_empty() {
+            s.push('<');
+            s.push_str(&source.collect::<String>());
+        }
+        if s.is_empty() {
+            unreachable!();
+        }
         let mut path = s
             .split(|c| c == ':')
             .map(|s| s.to_owned())
@@ -85,44 +93,45 @@ impl TryFrom<&str> for Identifier {
         let name = path.pop().unwrap();
         let mut iter = name.chars();
 
-        let mut name = String::new();
         let first = iter.next().unwrap();
         let kind = if OP_CHARS.contains(|c| c == first) {
             IdentifierType::Operator
         } else {
             IdentifierType::Normal
         };
-        name.push(first);
-        while let Some(c) = iter.next() {
-            if c == '<' {
-                return Identifier {
-                    path,
-                    kind,
-                    name,
-                    anot: None,
-                }
-                .with_annotation(iter);
-            }
-            match kind {
-                IdentifierType::Normal => {
-                    if !NAME_CHARS.contains(|a| a == c) {
-                        panic!("ET: {} not allowed in identifier", c);
-                    }
-                }
-                IdentifierType::Operator => {
-                    if !OP_CHARS.contains(|a| a == c) {
-                        panic!("ET: {} not allowed in operator name", c);
-                    }
-                }
-            }
-            name.push(c);
-        }
+
         Ok(Identifier {
             path,
-            kind,
             name,
+            kind,
             anot: None,
         })
+    }
+}
+
+pub trait Anotable<T> {
+    fn annotate<I: Iterator<Item = char>>(source: I) -> Result<Vec<T>, ParseFault>;
+}
+
+impl Anotable<Type> for Type {
+    fn annotate<I: Iterator<Item = char>>(mut source: I) -> Result<Vec<Type>, ParseFault> {
+        let anot = r#type::annotation(&mut source).expect("ET");
+        assert_eq!(source.next(), None);
+        Ok(anot)
+    }
+}
+
+impl<A: Anotable<A>> TryFrom<&str> for Identifier<A> {
+    type Error = ();
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        let mut iter = s.chars();
+        let mut base = Identifier::base_from(&mut iter)?;
+        let anot = A::annotate(iter).unwrap();
+        if !anot.is_empty() {
+            base.anot = Some(anot);
+        }
+        Ok(base)
     }
 }
 
@@ -133,14 +142,15 @@ mod tests {
     #[test]
     fn normal() {
         let s = "add";
+        let anot: Identifier<Type> = Identifier::try_from(s).unwrap();
         assert_eq!(
-            Identifier::try_from(s),
-            Ok(Identifier {
+            anot,
+            Identifier {
                 path: vec![],
                 name: "add".into(),
                 kind: IdentifierType::Normal,
                 anot: None,
-            })
+            }
         );
     }
     #[test]
@@ -186,28 +196,30 @@ mod tests {
     #[test]
     fn normal_pathed() {
         let s = "from:then:add";
+        let anot: Identifier<Type> = Identifier::try_from(s).unwrap();
         assert_eq!(
-            Identifier::try_from(s),
-            Ok(Identifier {
+            anot,
+            Identifier {
                 path: vec!["from".into(), "then".into()],
                 name: "add".into(),
                 kind: IdentifierType::Normal,
                 anot: None,
-            })
+            }
         );
     }
 
     #[test]
     fn oper() {
         let s = "+";
+        let anot: Identifier<Type> = Identifier::try_from(s).unwrap();
         assert_eq!(
-            Identifier::try_from(s),
-            Ok(Identifier {
+            anot,
+            Identifier {
                 path: vec![],
                 name: "+".into(),
                 kind: IdentifierType::Operator,
                 anot: None,
-            })
+            }
         );
     }
     #[test]

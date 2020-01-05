@@ -134,7 +134,7 @@ fn deep_cmp(
     true
 }
 
-impl<'a> Seekable<'a> for (usize, &Identifier, &[MaybeType]) {
+impl<'a> Seekable<'a> for (usize, &Identifier<Type>, &[MaybeType]) {
     fn seek(
         &self,
         parser: &'a Parser,
@@ -310,7 +310,7 @@ mod tests {
     use std::rc::Rc;
 
     fn test_data() -> Parser {
-        let mut parser = Parser::new(Rc::new(Environment::from(".".into())));
+        let mut parser = Parser::new(Rc::new(Environment::from("test_data".into(), ".".into())));
         let fid = parser.new_module(FileSource::Project(Vec::new()));
         parser.new_function(
             fid,
@@ -374,6 +374,5 @@ mod tests {
         let _meta = parser
             .find_func((0, &Identifier::try_from("generic").unwrap(), params))
             .unwrap();
-        // assert_eq!(funcid, 2);
     }
 }

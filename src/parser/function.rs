@@ -13,7 +13,7 @@ use std::hash::Hasher;
 // (operators are turned into functions)
 #[derive(Default, Clone)]
 pub struct FunctionBuilder {
-    pub name: Identifier,
+    pub name: Identifier<Type>,
     pub parameter_names: Vec<String>,
     pub parameter_types: Vec<Type>,
     pub returns: Type,

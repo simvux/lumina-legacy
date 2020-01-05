@@ -32,7 +32,7 @@ impl Hash for IdentMeta {
 #[derive(Default, Clone, Eq, PartialEq, Hash)]
 pub struct Meta {
     pub fid: usize,
-    pub ident: Identifier,
+    pub ident: Identifier<Type>,
     pub return_type: Type,
     pub identifiers: Vec<(String, IdentMeta)>,
 }
@@ -67,7 +67,7 @@ impl Meta {
         captured
     }
     // Turns parameters into captured values and appends new parameters. This is used when encountering lambdas.
-    pub fn lambda_swap(&mut self, params: &[Identifier], known_types: &[MaybeType]) {
+    pub fn lambda_swap(&mut self, params: &[Identifier<Type>], known_types: &[MaybeType]) {
         let mut captured_n = 0;
         for (_, im) in self.identifiers.iter_mut() {
             if let Identifiable::Param(_) = im.ident {

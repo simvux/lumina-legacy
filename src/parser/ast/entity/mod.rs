@@ -1,15 +1,15 @@
 mod identifier;
 use crate::parser::tokenizer::Inlinable;
-use crate::parser::Tracked;
+use crate::parser::{Tracked, Type};
 use std::fmt;
 
 pub use identifier::{Identifier, IdentifierType, NAME_CHARS};
 
 #[derive(Clone, Debug)]
 pub enum Callable {
-    Func(Identifier),
-    Builtin(Identifier),
-    Lambda(Vec<Identifier>, Box<Tracked<Entity>>),
+    Func(Identifier<Type>),
+    Builtin(Identifier<Type>),
+    Lambda(Vec<Identifier<Type>>, Box<Tracked<Entity>>),
 }
 
 impl fmt::Display for Callable {
@@ -38,10 +38,10 @@ impl fmt::Display for Callable {
 
 #[derive(Clone, Debug)]
 pub enum Passable {
-    Func(Identifier),
+    Func(Identifier<Type>),
     Value(Inlinable),
     PartialFunc(Callable, Vec<Tracked<Entity>>),
-    Lambda(Vec<Identifier>, Box<Tracked<Entity>>),
+    Lambda(Vec<Identifier<Type>>, Box<Tracked<Entity>>),
 }
 
 impl fmt::Display for Passable {
@@ -82,10 +82,10 @@ pub enum Entity {
         Box<Tracked<Entity>>,
     ),
     First(Vec<Tracked<Entity>>),
-    Lambda(Vec<Identifier>, Box<Tracked<Entity>>),
+    Lambda(Vec<Identifier<Type>>, Box<Tracked<Entity>>),
     List(Vec<Tracked<Entity>>),
     Inlined(Inlinable),
-    SingleIdent(Identifier),
+    SingleIdent(Identifier<Type>),
 
     // TODO: I want to add some meta info here so I can actually decribe what's unimplemented.
     // Is it root of function? Print that the entire function is implemented. Is just an if branch?

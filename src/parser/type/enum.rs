@@ -12,7 +12,7 @@ pub struct Enum {
 
 pub fn parse<I: Iterator<Item = char>>(
     tokenizer: &mut Tokenizer<I>,
-) -> Result<(Identifier, HashMap<String, Vec<Type>>), ParseError> {
+) -> Result<(Identifier<Type>, HashMap<String, Vec<Type>>), ParseError> {
     let first = tokenizer.next().ok_or_else(|| panic!("ET"))?;
     let type_ident = if let RawToken::Identifier(ident) = first.inner {
         ident
