@@ -1,5 +1,5 @@
 use super::ParseFault;
-use super::{Identifier, IdentifierType};
+use super::{Identifier, IdentifierType, Inlinable};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -215,6 +215,17 @@ pub fn annotation<I: Iterator<Item = char>>(iter: &mut I) -> Option<Vec<Type>> {
                     panic!("ET: Annotation missing `>`")
                 }
             }
+        }
+    }
+}
+
+impl From<&Inlinable> for Type {
+    fn from(v: &Inlinable) -> Type {
+        match v {
+            Inlinable::Int(_) => Type::Int,
+            Inlinable::Float(_) => Type::Float,
+            Inlinable::Bool(_) => Type::Bool,
+            Inlinable::Nothing => Type::Nothing,
         }
     }
 }

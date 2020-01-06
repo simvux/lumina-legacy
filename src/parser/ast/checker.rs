@@ -125,12 +125,7 @@ impl<'a> IrBuilder {
             )),
             ast::Entity::Inlined(inlined) => {
                 let v = inlined.clone();
-                let t = match inlined {
-                    Inlinable::Int(_) => Type::Int,
-                    Inlinable::Float(_) => Type::Float,
-                    Inlinable::Bool(_) => Type::Bool,
-                    Inlinable::Nothing => Type::Nothing,
-                };
+                let t = inlined.into();
                 Ok((MaybeType::Known(t), ir::Entity::Inlined(v.into())))
             }
             ast::Entity::Call(call, params) => {
@@ -302,9 +297,13 @@ impl<'a> IrBuilder {
                         ir::Entity::LambdaPointer(Box::new((v, to_capture))),
                     ))
                 }
-                ast::Passable::Value(inlinable) => {
-                    unimplemented!("{:?}", token);
-                }
+                ast::Passable::Value(inlinable) => Ok((
+                    (MaybeType::Known(Type::Function(Box::new((vec![], inlinable.into()))))),
+                    ir::Entity::LambdaPointer(Box::new((
+                        ir::Entity::Inlined(inlinable.clone().into()),
+                        vec![],
+                    ))),
+                )),
             },
             ast::Entity::If(branches, else_do) => self
                 .if_expression(branches, else_do, meta)
