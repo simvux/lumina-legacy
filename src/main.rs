@@ -11,7 +11,7 @@ mod macros;
 extern crate smallvec;
 
 mod parser;
-use parser::Parser;
+use parser::{ParseError, Parser};
 mod env;
 use env::Environment;
 use parser::{FileSource, IrBuilder};
@@ -32,18 +32,24 @@ fn main() {
         environment.help_message();
         return;
     }
+    match run(environment) {
+        Ok(_main_returns) => {}
+        Err(e) => println!("{}", e),
+    };
+}
 
+fn run(env: Rc<Environment>) -> Result<ir::Value, ParseError> {
     let (ir, entrypoint) = {
         // The parser is our main object up until our AST is both finished and type checked
-        let mut parser = Parser::new(environment.clone());
+        let mut parser = Parser::new(env.clone());
+
         if let Err(e) = parser.read_prelude_source() {
-            println!("{}", e.with_parser(parser));
-            return;
+            return Err(e.with_parser(parser));
         }
 
         // Open entry-point sourcecode file
         let mut source_code = String::with_capacity(20);
-        File::open(&environment.entrypoint)
+        File::open(&env.entrypoint)
             .unwrap()
             .read_to_string(&mut source_code)
             .unwrap();
@@ -51,16 +57,15 @@ fn main() {
         // Construct our AST by streaming tokens directly from the file into
         // parser.modules.{functions,types} seperated only by headers such as {fn,type,operator}
         let fid = match parser.tokenize(
-            FileSource::Project(vec![environment.entrypoint_name.clone()]),
+            FileSource::Project(vec![env.entrypoint_name.clone()]),
             source_code.chars(),
         ) {
             Ok(functions) => functions,
             Err(e) => {
-                println!("{}", e.with_parser(parser).load_source_code());
-                return;
+                return Err(e.with_parser(parser).load_source_code());
             }
         };
-        if environment.output.ast_full {
+        if env.output.ast_full {
             println!(
                 "{}\n",
                 &parser
@@ -70,32 +75,91 @@ fn main() {
                     .collect::<Vec<_>>()
                     .join("\n")
             );
-        } else if environment.output.ast_entry {
+        } else if env.output.ast_entry {
             println!("{}\n", &parser.modules[fid]);
         }
 
         // Verify syntax, infer types and compile to low-level IR.
-        match IrBuilder::new(parser, environment.clone()).start_type_checker(fid, "main", &[]) {
+        match IrBuilder::new(parser, env.clone()).start_type_checker(fid, "main", &[]) {
             Err(e) => {
-                println!("{}", e.load_source_code());
-                return;
+                return Err(e.load_source_code());
             }
             Ok(ir) => ir,
         }
     };
 
     let mut runtime = interpreter::Runtime::new(ir);
-    if environment.optimize {
+    if env.optimize {
         runtime.optimize();
     }
 
-    if environment.output.ir {
+    if env.output.ir {
         for entity in runtime.instructions.iter() {
             println!("{}", entity);
         }
     }
-    drop(environment);
+    drop(env);
 
     let entry = &runtime.instructions[entrypoint];
-    let _final_value = interpreter::Runner::start(&runtime, &entry, vec![]);
+    let final_value = interpreter::Runner::start(&runtime, &entry, vec![]);
+    Ok(final_value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::env::Output;
+    use std::path::{Path, PathBuf};
+    use std::str::FromStr;
+
+    // Unfortunately we can't really verify the actual return value of main itself since io:puts
+    // overwrites it with _.
+    //
+    // I tried using the `gag` crate however when using `cargo test` then there's a ton of other
+    // STDOUT which gets captured by `gag`.
+    //
+    // But hey, atleast we can verify that the examples don't panic.
+    fn run_example(path: &str, name: &str) {
+        let environment = Environment {
+            leafpath: std::env::var("LEAFPATH")
+                .map(|s| Path::new(&s).to_owned())
+                .unwrap_or_else(|_| {
+                    std::env::current_dir()
+                        .unwrap_or_else(|_| panic!("Could not find leafpath"))
+                        .to_owned()
+                }),
+            entrypoint: PathBuf::from_str(path).unwrap(),
+            entrypoint_name: name.into(),
+            output: Output {
+                ir: false,
+                ast_full: false,
+                ast_entry: false,
+                run: true,
+                help: false,
+            },
+            optimize: true,
+        };
+
+        let environment = Rc::new(environment);
+
+        match run(environment) {
+            Err(e) => panic!("{}", e),
+            Ok(_) => {}
+        }
+    }
+
+    #[test]
+    fn example_lists() {
+        run_example("examples/lists.lf", "lists.lf");
+    }
+
+    #[test]
+    fn example_if_else() {
+        run_example("examples/if-else.lf", "if-else.lf");
+    }
+
+    #[test]
+    fn example_void_values() {
+        run_example("examples/void-values.lf", "void-values.lf");
+    }
 }

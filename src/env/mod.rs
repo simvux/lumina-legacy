@@ -2,7 +2,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 mod output;
-use output::Output;
+pub use output::Output;
 mod flags;
 
 #[derive(Debug)]
