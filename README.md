@@ -196,4 +196,5 @@ The project is not yet in an usable state but we're getting there!
  - [ ] Strings! 
  - [ ] Figure out how we're gonna do files/sockets. Expose raw descriptors and syscalls? 
  - [ ] Unsafe library
- - [ ] Add a way to create platform-specific code
+ - [x] Add a way to create platform-specific code
+ - [ ] Unit testing
