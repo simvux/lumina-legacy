@@ -14,6 +14,7 @@ pub struct Runner<'a> {
     captured: Vec<Value>,
 }
 
+#[allow(unused)]
 fn debug_dump_entity(entity: &Entity) {
     match entity {
         Entity::Parameter(_) | Entity::Captured(_) | Entity::Inlined(_) | Entity::List(_) => {}
@@ -97,7 +98,7 @@ impl<'a> Runner<'a> {
                             Capturable::ParentParam(id) => {
                                 captured.push(self.params.clone_param(*id).clone())
                             }
-                            Capturable::ParentLambda(id) => {
+                            Capturable::ParentLambda(_id) => {
                                 unreachable!()
                             }
                             Capturable::ParentWhere(_) => unimplemented!("`where <identifier>:` values cannot be captured into closures (yet)"),

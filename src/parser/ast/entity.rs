@@ -1,5 +1,5 @@
 use crate::parser::tokenizer::Inlinable;
-use crate::parser::{Identifier, IdentifierType, Tracked, Type};
+use crate::parser::{Identifier, Tracked, Type};
 use std::fmt;
 
 #[derive(Clone, Debug)]

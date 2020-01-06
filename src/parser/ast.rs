@@ -1,6 +1,6 @@
 use crate::env::Environment;
 use crate::ir;
-use crate::parser::{Identifier, MaybeType, ParseError, Parser, Type, NAME_CHARS};
+use crate::parser::{Identifier, MaybeType, ParseError, Parser, Type};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;

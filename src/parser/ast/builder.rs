@@ -165,7 +165,6 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
     }
 
     // We run this when we're looking for parameters
-    // TODO: We should probably be using VecDeque here
     fn run_parameterized(&mut self) -> Result<Vec<Tracked<Entity>>, ParseError> {
         let t = match self.tokenizer.peek() {
             Some(t) => t,

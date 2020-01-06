@@ -1,5 +1,4 @@
 use std::fmt;
-use std::ops::Deref;
 
 // Simple wrapper type, used for including the source-code index on both ast::Entity and RawToken
 #[derive(Clone, Default)]
