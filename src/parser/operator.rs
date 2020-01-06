@@ -1,6 +1,4 @@
-use super::{
-    ast::IdentifierType, FunctionBuilder, Key, ParseError, ParseFault, RawToken, Tokenizer,
-};
+use super::{FunctionBuilder, IdentifierType, Key, ParseError, ParseFault, RawToken, Tokenizer};
 use std::convert::TryInto;
 
 // Operator reuses most of the function-construction methods

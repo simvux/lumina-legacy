@@ -1,4 +1,4 @@
-use crate::parser::{r#type, Attr, ParseFault, Type};
+use super::{r#type, Attr, ParseFault, Type};
 use std::convert::TryFrom;
 use std::fmt;
 

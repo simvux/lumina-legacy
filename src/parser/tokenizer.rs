@@ -1,5 +1,5 @@
 mod token;
-use super::{ast, Tracked};
+use super::{Tracked, NAME_CHARS};
 use std::convert::TryFrom;
 use std::iter::Peekable;
 pub use token::{Capture, Header, Inlinable, Key, Operator, RawToken, Token};
@@ -102,7 +102,7 @@ impl<I: Iterator<Item = char>> Tokenizer<I> {
                 '<' => {
                     // Hack to make annotations parse correctly
                     if let Some(last) = buf.chars().rev().nth(0) {
-                        if ast::NAME_CHARS.contains(last) {
+                        if NAME_CHARS.contains(last) {
                             self.walk();
                             // It's an annotation to previous
                             let complete_anot = self.gather_to_recursive(|c| match c {

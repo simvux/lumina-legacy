@@ -1,5 +1,5 @@
-use super::ast::{Identifier, IdentifierType};
 use super::ParseFault;
+use super::{Identifier, IdentifierType};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;

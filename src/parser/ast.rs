@@ -1,6 +1,6 @@
 use crate::env::Environment;
 use crate::ir;
-use crate::parser::{MaybeType, ParseError, Parser, Type};
+use crate::parser::{Identifier, MaybeType, ParseError, Parser, Type, NAME_CHARS};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 mod checker;
 mod entity;
-pub use entity::{Callable, Entity, Identifier, IdentifierType, Passable, NAME_CHARS};
+pub use entity::{Callable, Entity, Passable};
 mod builder;
 pub use builder::AstBuilder;
 mod metainfo;

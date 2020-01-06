@@ -18,7 +18,7 @@ pub use leafmod::FileSource;
 mod r#type;
 pub use r#type::{CustomType, Enum, MaybeType, Struct, Type};
 mod ast;
-pub use ast::{Identifier, IdentifierType, IrBuilder};
+pub use ast::IrBuilder;
 mod error;
 mod operator;
 pub use error::*;
@@ -28,6 +28,8 @@ mod tracked;
 pub use tracked::Tracked;
 mod attribute;
 pub use attribute::Attr;
+mod identifier;
+pub use identifier::{Identifier, IdentifierType, NAME_CHARS};
 
 const PRELUDE_FID: usize = 0;
 

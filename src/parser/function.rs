@@ -1,8 +1,6 @@
 use super::{
-    ast,
-    ast::{AstBuilder, Identifier},
-    tokenizer::TokenSource,
-    Attr, Key, ParseError, ParseFault, RawToken, Tokenizer, Tracked, Type,
+    ast, ast::AstBuilder, tokenizer::TokenSource, Attr, Identifier, Key, ParseError, ParseFault,
+    RawToken, Tokenizer, Tracked, Type,
 };
 use std::convert::TryFrom;
 use std::convert::TryInto;
