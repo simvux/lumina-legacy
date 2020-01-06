@@ -1,5 +1,4 @@
-use crate::parser::ast::Identifier;
-use crate::parser::{Tracked, Type};
+use crate::parser::{Identifier, Tracked};
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -30,7 +29,6 @@ impl TryFrom<&str> for RawToken {
         } else if bytes == "\n" {
             Ok(RawToken::NewLine)
         } else {
-            dbg!(&bytes);
             Ok(RawToken::Identifier(Identifier::try_from(bytes)?))
         }
     }
@@ -44,7 +42,7 @@ pub struct Capture {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum RawToken {
-    Identifier(Identifier<Type>),
+    Identifier(Identifier<String>),
 
     Header(Header),
     Key(Key),
@@ -60,24 +58,23 @@ impl fmt::Display for RawToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use RawToken::*;
         match self {
-            Identifier(ident) => {
-                let mut a = ident.path.iter().map(|i| i.as_str()).collect::<Vec<&str>>();
-                a.push(&ident.name);
-                write!(
-                    f,
-                    "{}<{}>",
-                    a.join(":"),
-                    ident
-                        .anot
-                        .as_ref()
-                        .map(|a| a.as_slice())
-                        .unwrap_or(&[])
-                        .iter()
-                        .map(|a| a.to_string())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
-            }
+            Identifier(ident) => write!(
+                f,
+                "{}{}",
+                ident.path.join(":"),
+                ident
+                    .anot
+                    .as_ref()
+                    .map(|anots| format!(
+                        "<{}>",
+                        anots
+                            .iter()
+                            .map(|a| a.to_string())
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    ))
+                    .unwrap_or_else(String::new)
+            ),
             Header(h) => h.fmt(f),
             Key(key) => key.fmt(f),
             Inlined(inlined) => inlined.fmt(f),

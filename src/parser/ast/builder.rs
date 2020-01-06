@@ -81,9 +81,9 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 let (mut ident, pos) = assume!(RawToken::Identifier, self.tokenizer.next());
                 let callable = if ident.path.first().map(|s| s.as_str()) == Some("builtin") {
                     ident.path.remove(0);
-                    Callable::Builtin(ident)
+                    Callable::Builtin(ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?)
                 } else {
-                    Callable::Func(ident)
+                    Callable::Func(ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?)
                 };
                 let v = self
                     .run_maybe_parameterized(Tracked::new(callable).set(pos))
@@ -140,7 +140,9 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
         let mut params = Vec::new();
         let pos = loop {
             match self.tokenizer.next().map(|t| t.sep()) {
-                Some((RawToken::Identifier(ident), _pos)) => params.push(ident),
+                Some((RawToken::Identifier(ident), pos)) => {
+                    params.push(ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?)
+                }
                 Some((RawToken::Key(Key::Arrow), pos)) => break pos,
                 Some((other, pos)) => {
                     return Err(ParseFault::GotButExpected(
@@ -182,7 +184,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                     return Ok(Vec::new());
                 }
                 let (ident, pos) = assume!(RawToken::Identifier, self.tokenizer.next());
-                let v = Tracked::new(Entity::SingleIdent(ident)).set(pos);
+                let v = Tracked::new(Entity::SingleIdent(
+                    ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?,
+                ))
+                .set(pos);
                 let mut params = self.run_parameterized()?;
                 params.insert(0, v);
                 Ok(params)
@@ -268,7 +273,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             }
             RawToken::Identifier(ident) => {
                 // It's just a direct pass of a function
-                let v = Tracked::new(Passable::Func(ident)).set(pos);
+                let v = Tracked::new(Passable::Func(
+                    ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?,
+                ))
+                .set(pos);
                 Ok(v)
             }
             RawToken::Inlined(inlinable) => Ok(Tracked::new(Passable::Value(inlinable)).set(pos)),
@@ -322,7 +330,11 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 if ident.is_operator() {
                     let (ident, pos) = assume!(RawToken::Identifier, self.tokenizer.next());
                     // We don't need to run_maybe_operator here because run_operator already does that
-                    self.run_operator(left, Tracked::new(ident).set(pos))
+                    self.run_operator(
+                        left,
+                        Tracked::new(ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?)
+                            .set(pos),
+                    )
                 } else {
                     Err(ParseFault::Unexpected(t.inner.clone()).into_err(t.pos()))
                 }

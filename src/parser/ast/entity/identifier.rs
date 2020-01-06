@@ -1,13 +1,23 @@
-use crate::parser::{r#type, ParseFault, Type};
+use crate::parser::{r#type, Attr, ParseFault, Type};
 use std::convert::TryFrom;
 use std::fmt;
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug, Default)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Identifier<A> {
     pub path: Vec<String>,
     pub name: String,
     pub kind: IdentifierType,
     pub anot: Option<Vec<A>>,
+}
+impl<A> Default for Identifier<A> {
+    fn default() -> Self {
+        Self {
+            path: vec![],
+            name: String::new(),
+            kind: IdentifierType::Normal,
+            anot: None,
+        }
+    }
 }
 impl<A: fmt::Display + Clone> fmt::Display for Identifier<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -45,15 +55,6 @@ impl Default for IdentifierType {
 const OP_CHARS: &str = "!@#$%-+*/&?{}=;<>|";
 pub const NAME_CHARS: &str = "abcdefghijklmnopqrstuvwxyz123456789_-";
 
-impl Identifier<Type> {
-    pub fn with_annotation<I: Iterator<Item = char>>(mut self, mut iter: I) -> Result<Self, ()> {
-        let anot = r#type::annotation(&mut iter).expect("ET");
-        let anot = if anot.is_empty() { None } else { Some(anot) };
-        self.anot = anot;
-        Ok(self)
-    }
-}
-
 impl<A> Identifier<A> {
     pub fn raw(name: &str) -> Identifier<A> {
         let fst = name.chars().next();
@@ -72,6 +73,15 @@ impl<A> Identifier<A> {
 
     pub fn is_operator(&self) -> bool {
         self.kind == IdentifierType::Operator
+    }
+
+    pub fn swap_anot<B>(self, anot: Option<Vec<B>>) -> Identifier<B> {
+        Identifier {
+            anot,
+            name: self.name,
+            kind: self.kind,
+            path: self.path,
+        }
     }
 
     fn base_from<I: Iterator<Item = char>>(source: &mut I) -> Result<Identifier<A>, ()> {
@@ -109,15 +119,72 @@ impl<A> Identifier<A> {
     }
 }
 
+impl Identifier<Attr> {
+    pub fn is_targeted_sys(&self) -> bool {
+        let mut yes = true;
+        match &self.anot {
+            None => yes,
+            Some(anots) => {
+                for anot in anots.iter() {
+                    if let Some(matches) = anot.is_targeted_sys() {
+                        if matches {
+                            return true;
+                        } else {
+                            yes = false;
+                        }
+                    }
+                }
+                yes
+            }
+        }
+    }
+}
+
 pub trait Anotable<T> {
-    fn annotate<I: Iterator<Item = char>>(source: I) -> Result<Vec<T>, ParseFault>;
+    fn annotate<I: Iterator<Item = char>>(iter: I) -> Result<Vec<T>, ParseFault>;
 }
 
 impl Anotable<Type> for Type {
-    fn annotate<I: Iterator<Item = char>>(mut source: I) -> Result<Vec<Type>, ParseFault> {
-        let anot = r#type::annotation(&mut source).expect("ET");
-        assert_eq!(source.next(), None);
+    fn annotate<I: Iterator<Item = char>>(mut iter: I) -> Result<Vec<Type>, ParseFault> {
+        let anot = r#type::annotation(&mut iter).expect("ET");
+        assert_eq!(iter.next(), None);
         Ok(anot)
+    }
+}
+
+impl Anotable<String> for String {
+    fn annotate<I: Iterator<Item = char>>(mut iter: I) -> Result<Vec<String>, ParseFault> {
+        let mut anots = Vec::new();
+        loop {
+            let (segment, drop) = gather_anot_seg(&mut iter);
+            if !segment.is_empty() {
+                anots.push(segment.trim().to_string());
+            }
+            match drop {
+                ',' => {}
+                '>' => return Ok(anots),
+                '\u{0000}' => return Ok(anots),
+                other => panic!("ET: Unexpected {}", other),
+            }
+        }
+    }
+}
+fn gather_anot_seg<I: Iterator<Item = char>>(iter: &mut I) -> (String, char) {
+    let mut buf = String::new();
+    loop {
+        let c = match iter.next() {
+            None => return (buf, 0 as char),
+            Some(c) => c,
+        };
+        match c {
+            '<' => {
+                buf.push(c);
+                iter.take_while(|c| *c != '>').for_each(|c| buf.push(c));
+                buf.push('>');
+            }
+            '>' | ',' => return (buf, c),
+            _ => buf.push(c),
+        }
     }
 }
 
@@ -132,6 +199,42 @@ impl<A: Anotable<A>> TryFrom<&str> for Identifier<A> {
             base.anot = Some(anot);
         }
         Ok(base)
+    }
+}
+
+impl TryFrom<Identifier<String>> for Identifier<Type> {
+    type Error = ParseFault;
+
+    fn try_from(ident: Identifier<String>) -> Result<Identifier<Type>, Self::Error> {
+        match &ident.anot {
+            Some(anots) => {
+                let mut buf = Vec::new();
+                for segm in anots.iter() {
+                    buf.push(Type::try_from(segm.as_str())?)
+                }
+                Ok(ident.swap_anot(Some(buf)))
+            }
+
+            None => Ok(ident.swap_anot(None)),
+        }
+    }
+}
+
+impl TryFrom<Identifier<String>> for Identifier<Attr> {
+    type Error = ParseFault;
+
+    fn try_from(ident: Identifier<String>) -> Result<Identifier<Attr>, Self::Error> {
+        match &ident.anot {
+            Some(anots) => {
+                let mut buf = Vec::new();
+                for segm in anots.iter() {
+                    buf.push(Attr::try_from(segm.as_str())?)
+                }
+                Ok(ident.swap_anot(Some(buf)))
+            }
+
+            None => Ok(ident.swap_anot(None)),
+        }
     }
 }
 

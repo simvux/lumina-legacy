@@ -67,6 +67,19 @@ impl<I: Iterator<Item = char>> Tokenizer<I> {
             }
         }
     }
+    pub fn skip_tokens_until(&mut self, predicate: impl Fn(&RawToken) -> bool) {
+        loop {
+            match self.peek() {
+                Some(t) => {
+                    if predicate(&t.inner) {
+                        return;
+                    }
+                    self.next();
+                }
+                None => return,
+            }
+        }
+    }
 
     fn walk(&mut self) -> Option<char> {
         self.position += 1;

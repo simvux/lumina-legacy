@@ -2,9 +2,10 @@ use super::{
     ast,
     ast::{AstBuilder, Identifier},
     tokenizer::TokenSource,
-    Key, ParseError, ParseFault, RawToken, Tokenizer, Tracked, Type,
+    Attr, Key, ParseError, ParseFault, RawToken, Tokenizer, Tracked, Type,
 };
 use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -13,7 +14,7 @@ use std::hash::Hasher;
 // (operators are turned into functions)
 #[derive(Default, Clone)]
 pub struct FunctionBuilder {
-    pub name: Identifier<Type>,
+    pub name: Identifier<Attr>,
     pub parameter_names: Vec<String>,
     pub parameter_types: Vec<Type>,
     pub returns: Type,
@@ -66,23 +67,19 @@ impl FunctionBuilder {
             }
             Some(t) => t,
         };
-        self.name = match first.inner {
-            RawToken::Identifier(ident) => {
+        self.name = match first.sep() {
+            (RawToken::Identifier(ident), pos) => {
                 if !ident.path.is_empty() {
                     panic!("ET: Path in function name");
                 }
-                if ident.anot.is_some() {
-                    panic!("ET: Annotation for function name");
-                }
-                ident
+                ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?
             }
-            _ => {
-                let source_index = first.pos();
+            (other, pos) => {
                 return ParseFault::GotButExpected(
-                    first.inner,
+                    other,
                     vec![RawToken::Identifier(Identifier::raw("function name"))],
                 )
-                .into_err(source_index)
+                .into_err(pos)
                 .into();
             }
         };

@@ -1,7 +1,9 @@
 use super::Type;
-use crate::parser::{tokenizer::TokenSource, Identifier, ParseError, RawToken, Tokenizer};
+use crate::parser::{
+    tokenizer::TokenSource, Identifier, ParseError, ParseFault, RawToken, Tokenizer,
+};
 use std::collections::HashMap;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fmt;
 
 pub struct Enum {
@@ -14,6 +16,7 @@ pub fn parse<I: Iterator<Item = char>>(
     tokenizer: &mut Tokenizer<I>,
 ) -> Result<(Identifier<Type>, HashMap<String, Vec<Type>>), ParseError> {
     let first = tokenizer.next().ok_or_else(|| panic!("ET"))?;
+    let type_ident_pos = first.pos();
     let type_ident = if let RawToken::Identifier(ident) = first.inner {
         ident
     } else {
@@ -38,7 +41,14 @@ pub fn parse<I: Iterator<Item = char>>(
                     panic!("ET: Duplicates of field");
                 }
             }
-            None => return Ok((type_ident, fields)),
+            None => {
+                return Ok((
+                    type_ident
+                        .try_into()
+                        .map_err(|e: ParseFault| e.into_err(type_ident_pos))?,
+                    fields,
+                ))
+            }
         }
     }
 }

@@ -18,11 +18,12 @@ pub enum Type {
     Int,
     Float,
     Bool,
-    External(Box<(String, Type)>),
     Generic(u8),
     List(Box<Type>),
     Struct(i32, i32),
     Function(Box<(Vec<Type>, Type)>),
+
+    External(Box<(String, Type)>), // This one is all wrong
     Custom(Identifier<Type>),
 }
 
@@ -98,42 +99,59 @@ impl TryFrom<&str> for Type {
     type Error = ParseFault;
 
     fn try_from(source: &str) -> Result<Type, Self::Error> {
-        if source.bytes().next() == Some(b'[') {
-            if source.len() < 3 {
-                return Err(ParseFault::EmptyListType);
+        if let Some(first) = source.chars().next() {
+            // Lists
+            if first == '[' {
+                if source.len() < 3 {
+                    return Err(ParseFault::EmptyListType);
+                }
+                let inner = source[1..source.len() - 2].trim();
+                return Ok(Type::List(Box::new(Type::try_from(inner)?)));
             }
-            let inner = source[1..source.len() - 2].trim();
-            return Ok(Type::List(Box::new(Type::try_from(inner)?)));
+            // Unbound Generics
+            if (first as u8) > 96 && (first as u8) < 123 && source.len() == 1 {
+                return Ok(Type::Generic(first as u8 - 97));
+            }
+        } else {
+            panic!("Empty type");
         }
-        if source.len() == 1
-            && source.bytes().next() > Some(96)
-            && source.bytes().next() < Some(123)
-        {
-            return Ok(Type::Generic(source.bytes().next().unwrap() - 97));
-        }
-        let r = match source {
+
+        let mut iter = source.chars();
+        let mut tbuf = String::new();
+        let has_anot = loop {
+            match iter.next() {
+                Some(c) => {
+                    if c == '<' {
+                        break true;
+                    }
+                    tbuf.push(c);
+                }
+                None => break false,
+            };
+        };
+        let anot = if has_anot {
+            annotation(&mut iter)
+        } else {
+            None
+        };
+        assert_eq!(iter.next(), None);
+        let t = match tbuf.as_str() {
             "int" => Type::Int,
             "float" => Type::Float,
-            "nothing" => Type::Nothing,
+            "nothing" | "_" => Type::Nothing,
             "bool" => Type::Bool,
-            "_" => Type::Nothing,
-            // TODO: Custom types need to be passed as okay!
-            _ => return Err(ParseFault::NotValidType(source.into())),
+            _ => {
+                let mut path = tbuf.split(':').map(|s| s.to_owned()).collect::<Vec<_>>();
+                let name = path.pop().unwrap();
+                Type::Custom(Identifier {
+                    name,
+                    anot,
+                    path,
+                    kind: IdentifierType::Normal,
+                })
+            }
         };
-        Ok(r)
-    }
-}
-
-impl TryFrom<Vec<String>> for Type {
-    type Error = ParseFault;
-
-    fn try_from(mut entries: Vec<String>) -> Result<Type, Self::Error> {
-        let r#type = Type::try_from(entries.last().unwrap().as_str())?;
-        if entries.len() == 1 {
-            Ok(r#type)
-        } else {
-            Ok(Type::External(Box::new((entries.remove(0), r#type))))
-        }
+        Ok(t)
     }
 }
 

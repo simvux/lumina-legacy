@@ -1,5 +1,6 @@
 use crate::env::Environment;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
@@ -25,6 +26,8 @@ pub use leafmod::ParseModule;
 mod seekable;
 mod tracked;
 pub use tracked::Tracked;
+mod attribute;
+pub use attribute::Attr;
 
 const PRELUDE_FID: usize = 0;
 
@@ -171,11 +174,18 @@ impl Parser {
                 RawToken::Header(h) => match h {
                     Header::Function => {
                         let mut funcb = FunctionBuilder::new().with_header(&mut tokenizer)?;
-                        funcb
-                            .parse_body(&mut tokenizer)
-                            .map_err(|e| e.fallback_index(source_index).fallback_fid(fid))?;
+                        if funcb.name.is_targeted_sys() {
+                            funcb
+                                .parse_body(&mut tokenizer)
+                                .map_err(|e| e.fallback_index(source_index).fallback_fid(fid))?;
 
-                        self.new_function(fid, funcb);
+                            self.new_function(fid, funcb);
+                        } else {
+                            tokenizer.skip_tokens_until(|t| match t {
+                                RawToken::Header(_) => true,
+                                _ => false,
+                            });
+                        }
                     }
                     Header::Operator => {
                         let mut funcb =
@@ -210,8 +220,13 @@ impl Parser {
                                 panic!("ET: Unexpected thing after `use` keyword: {:?}", other)
                             }
                         };
-
-                        let file_path = module_path.fork_from(ident.clone(), &*self.environment);
+                        let name = ident.name.clone();
+                        let file_path = module_path.fork_from(
+                            ident
+                                .try_into()
+                                .map_err(|e: ParseFault| e.into_err(source_index))?,
+                            &*self.environment,
+                        );
 
                         let usefid = self
                             .tokenize_import(file_path)
@@ -220,7 +235,7 @@ impl Parser {
                         // `usefid` is the ID which was assigned,
                         // it's already been inserted as a module in the parser
                         // but we need to add it to *this* modules imports.
-                        self.modules[fid].imports.insert(ident.name, usefid);
+                        self.modules[fid].imports.insert(name, usefid);
                     }
                 },
                 RawToken::NewLine => continue,

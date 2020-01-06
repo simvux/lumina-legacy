@@ -121,6 +121,7 @@ pub enum ParseFault {
     CannotInferType(char),
     InvalidClosure(ast::Entity),
     InvalidClosureT(RawToken),
+    UnrecognizedAttribute(String),
     EmptyParen,
     FirstMissingThen,
     FirstWantedThen(RawToken),
@@ -215,6 +216,7 @@ impl fmt::Display for ParseError {
         match &self.variant {
             ParameterlessLambda => write!(f, "This lambda wasn't given any parameters"),
             IdentifierNotFound(name) => write!(f, "Could not find a function, constant or parameter named `{}`", name),
+            UnrecognizedAttribute(name) => write!(f, "`{}` isn't a known function attribute", name),
             InvalidPath(entries) => write!(f, "`{}` is not a valid module path", entries.join(":")),
             BridgedWrongPathLen(entries) => write!(f, "`{}` wrong length of path", entries.join(":")),
             BridgedFunctionNotFound(ident) => write!(f, "No bridged function named `{}`", ident),
@@ -337,22 +339,22 @@ impl fmt::Display for ParseError {
                                 "Type mismatch. Wanted `{}` but got {}\n {}\n {}",
                                 wanted_params[i],
                                 params[i],
-                                format_header(ident, Some(params), None),
-                                format_header(&wfuncb.name, Some(wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()) ,None),
+                                format_header(&ident.name, ident.kind.clone(), Some(params), None),
+                                format_header(&wfuncb.name.name, ident.kind.clone(), Some(wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()) ,None),
                             )
                         } else {
                             write!(f, "No function named `{}` takes these parameters\n  {}\n perhaps you meant to use?\n  {}",
-                                ident,
-                                format_header(ident, Some(&params), None),
-                                format_header(&wfuncb.name, Some(&wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None),
+                                &ident.name,
+                                format_header(&ident.name, ident.kind.clone(), Some(&params), None),
+                                format_header(&wfuncb.name.name, ident.kind.clone(), Some(&wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None),
                                 )
                         }
                     }
                     _ => {
                         write!(f, "No function named `{}` takes these parameters\n  {}\n i did however find these variants\n  {}",
-                            ident,
-                            format_header(ident, Some(params.as_slice()), None),
-                            variants.keys().map(|params| format_header(&ident, Some(params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None)).collect::<Vec<String>>().join("\n  ")
+                            &ident.name,
+                            format_header(&ident.name, ident.kind.clone(), Some(params.as_slice()), None),
+                            variants.keys().map(|params| format_header(&ident.name, ident.kind.clone(), Some(params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None)).collect::<Vec<String>>().join("\n  ")
                             )
                     },
                 }
@@ -419,7 +421,7 @@ impl fmt::Display for ParseError {
                 // let p_types = funcb.parameter_types.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>();
                 write!(f, "This function returns the wrong value. Acording to its type signature it should return `{}`\n  {}\nbut instead it returns `{}`",
                 meta.return_type,
-                format_header(&meta.ident,
+                format_header(&meta.ident.name, meta.ident.kind.clone(),
                 if p_types.is_empty() { 
                     None 
                 } else { 
@@ -455,15 +457,16 @@ fn format_function_parameter<A: fmt::Display, B: fmt::Display>(
 }
 
 fn format_header(
-    name: &Identifier<Type>,
+    name: &str,
+    kind: IdentifierType,
     params: Option<&[MaybeType]>,
     returns: Option<&Type>,
 ) -> String {
-    match name.kind {
-        IdentifierType::Normal => format_function_header(&name.name, params, returns),
+    match kind {
+        IdentifierType::Normal => format_function_header(name, params, returns),
         IdentifierType::Operator => {
             let params = params.unwrap();
-            format_operator_header(&name.name, &params, returns)
+            format_operator_header(name, &params, returns)
         }
     }
 }

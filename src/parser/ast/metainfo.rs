@@ -1,6 +1,6 @@
 use super::Type;
 use crate::ir::Capturable;
-use crate::parser::{Identifier, MaybeType};
+use crate::parser::{Attr, Identifier, MaybeType};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -32,7 +32,7 @@ impl Hash for IdentMeta {
 #[derive(Default, Clone, Eq, PartialEq, Hash)]
 pub struct Meta {
     pub fid: usize,
-    pub ident: Identifier<Type>,
+    pub ident: Identifier<Attr>,
     pub return_type: Type,
     pub identifiers: Vec<(String, IdentMeta)>,
 }

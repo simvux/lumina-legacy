@@ -1,6 +1,7 @@
 use super::{
     ast::IdentifierType, FunctionBuilder, Key, ParseError, ParseFault, RawToken, Tokenizer,
 };
+use std::convert::TryInto;
 
 // Operator reuses most of the function-construction methods
 
@@ -13,17 +14,19 @@ impl FunctionBuilder {
             None => return ParseFault::OpNoIdent.into_err(0).into(),
             Some(t) => t,
         };
+        let first_pos = first.pos();
         match first.inner {
             RawToken::Identifier(ident) => {
                 if ident.kind != IdentifierType::Operator {
                     panic!("ET: *this* is not a valid operator name");
                 }
-                self.name = ident;
+                self.name = ident
+                    .try_into()
+                    .map_err(|e: ParseFault| e.into_err(first_pos))?;
             }
             _ => {
-                let source_index = first.pos();
                 return ParseFault::OpWantedIdent(first.inner)
-                    .into_err(source_index)
+                    .into_err(first_pos)
                     .into();
             }
         };
