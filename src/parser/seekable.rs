@@ -266,21 +266,6 @@ impl<'a> Seekable<'a> for (usize, &Identifier<Type>, &[MaybeType]) {
         Ok((&func.body, meta))
     }
 }
-/*
-impl<'a> Seekable<'a> for (usize, &str, Identifier, &[MaybeType]) {
-    fn seek(
-        &self,
-        parser: &'a Parser,
-    ) -> Result<(&'a Tracked<ast::Entity>, ast::Meta), ParseFault> {
-        let fid = parser.modules[self.0]
-            .imports
-            .get(self.1)
-            .copied()
-            .ok_or_else(|| ParseFault::Internal)?;
-        Seekable::seek(&(fid, &self.2, self.3), parser)
-    }
-}
-*/
 
 impl Parser {
     pub fn find_func<'a, S: Seekable<'a> + std::fmt::Debug>(
@@ -300,22 +285,22 @@ impl Parser {
     }
 }
 
-// TODO: Fix these tests (broke after seek() -> Meta refactor)
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::parser::{FileSource, FunctionBuilder, Parser, Tracked};
     use crate::Environment;
-    use std::convert::TryFrom;
+    use std::convert::{TryFrom, TryInto};
     use std::rc::Rc;
 
     fn test_data() -> Parser {
         let mut parser = Parser::new(Rc::new(Environment::from("test_data".into(), ".".into())));
         let fid = parser.new_module(FileSource::Project(Vec::new()));
+        let ident: Identifier<String> = Identifier::try_from("simple").unwrap();
         parser.new_function(
             fid,
             FunctionBuilder {
-                name: Identifier::try_from("simple").unwrap(),
+                name: ident.try_into().unwrap(),
                 parameter_names: vec!["x".into(), "y".into()],
                 parameter_types: vec![Type::Int, Type::Int],
                 returns: Type::Int,
@@ -323,10 +308,11 @@ mod tests {
                 wheres: Vec::new(),
             },
         );
+        let ident: Identifier<String> = Identifier::try_from("generic").unwrap();
         parser.new_function(
             fid,
             FunctionBuilder {
-                name: Identifier::try_from("generic").unwrap(),
+                name: ident.try_into().unwrap(),
                 parameter_names: vec!["x".into(), "y".into()],
                 parameter_types: vec![
                     Type::Generic(0),
@@ -339,10 +325,11 @@ mod tests {
                 wheres: Vec::new(),
             },
         );
+        let ident: Identifier<String> = Identifier::try_from("generic").unwrap();
         parser.new_function(
             fid,
             FunctionBuilder {
-                name: Identifier::try_from("generic").unwrap(),
+                name: ident.try_into().unwrap(),
                 parameter_names: vec!["x".into(), "y".into()],
                 parameter_types: vec![Type::Generic(0), Type::Int, Type::Generic(1), Type::Int],
                 returns: Type::Int,
