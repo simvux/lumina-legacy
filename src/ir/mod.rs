@@ -14,6 +14,7 @@ pub enum Entity {
     RustCall(Bridged, Vec<Entity>),
     FunctionCall(u32, Vec<Entity>),
     ParameterCall(u32, Vec<Entity>),
+    CapturedCall(u32, Vec<Entity>),
     IfExpression(self::If<Entity>),
     FirstStatement(self::First<Entity>),
     Parameter(u16),
@@ -95,6 +96,13 @@ impl fmt::Display for Entity {
             }
             Entity::ParameterCall(i, params) => {
                 write!(f, "(pcall-{}", i)?;
+                for p in params.iter() {
+                    write!(f, " {}", p)?
+                }
+                write!(f, ")")
+            }
+            Entity::CapturedCall(i, params) => {
+                write!(f, "(ccall-{}", i)?;
                 for p in params.iter() {
                     write!(f, " {}", p)?
                 }

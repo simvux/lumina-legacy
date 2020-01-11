@@ -15,12 +15,25 @@ pub struct Runner<'a> {
 }
 
 #[allow(unused)]
-fn debug_dump_entity(entity: &Entity) {
-    match entity {
+fn debug_dump_entity(runner: &Runner) {
+    match runner.entity {
         Entity::Parameter(_) | Entity::Captured(_) | Entity::Inlined(_) | Entity::List(_) => {}
         _ => println!(
-            " {g}runner{r} {y}->{r} {}",
-            entity,
+            " {g}runner{r} {y}->{r} {g}using{r} ({y}|{r}{}{y}|{r}) {y}({r}{}{y}){r} {g}evaluating{r} {}",
+            runner
+                .captured
+                .iter()
+                .map(|c| c.to_string())
+                .collect::<Vec<_>>()
+                .join(" "),
+            runner
+                .params
+                .as_slice()
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(" "),
+            runner.entity,
             r = Fg(Reset),
             g = Fg(Green),
             y = Fg(Yellow)
@@ -50,6 +63,9 @@ impl<'a> Runner<'a> {
     }
 
     fn run(mut self) -> Value {
+        #[cfg(debug_assertions)]
+        debug_dump_entity(&self);
+
         loop {
             match self.entity {
                 Entity::RustCall(index, params) => return self.rust_call(*index, params),
@@ -62,6 +78,17 @@ impl<'a> Runner<'a> {
                     let evaluated_params = self.eval_params(params);
                     if let Value::Function(box (entity, captured)) =
                         self.params.clone_param(*paramid as usize)
+                    {
+                        // TODO: Fix memory management
+                        return self.spawn(&entity, evaluated_params, captured.clone());
+                    } else {
+                        unreachable!();
+                    }
+                }
+                Entity::CapturedCall(capid, params) => {
+                    let evaluated_params = self.eval_params(params);
+                    if let Value::Function(box (entity, captured)) =
+                        self.captured[*capid as usize].clone()
                     {
                         // TODO: Fix memory management
                         return self.spawn(&entity, evaluated_params, captured.clone());

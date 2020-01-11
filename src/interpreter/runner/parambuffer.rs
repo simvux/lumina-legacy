@@ -27,7 +27,7 @@ impl<'p> ParamBuffer<'p> {
             ParamBuffer::Borrowed(vec) => &vec[n],
         }
     }
-    fn as_slice(&self) -> &[Value] {
+    pub fn as_slice(&self) -> &[Value] {
         match self {
             Self::Borrowed(v) => v.as_slice(),
             Self::Owned(v) => v.as_slice(),

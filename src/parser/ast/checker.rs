@@ -1,6 +1,7 @@
 use super::IrBuilder;
 use crate::ir;
-use crate::parser::{ast, Identifier, Inlinable, MaybeType, ParseError, ParseFault, Tracked, Type};
+use crate::parser::{ast, Identifier, MaybeType, ParseError, ParseFault, Tracked, Type};
+use std::convert::TryFrom;
 
 use super::{Identifiable, Meta};
 
@@ -23,77 +24,66 @@ impl<'a> IrBuilder {
         self.build_function(meta, entry)
     }
 
-    // If we only want *one* singular variant and error with "annotation required" whenever we get
-    // multiple variants.
-    pub fn find_and_build_only_suitable(
+    pub fn find_only_suitable(
         &'a self,
         self_fid: usize,
         ident: &Identifier<Type>,
-    ) -> Result<(Type, &[Type], usize), ParseError> {
-        let (variants, fid) = self
+        atleast_params: usize,
+    ) -> Result<(usize, usize), ParseError> {
+        let (raw_variants, fid) = self
             .parser
             .variants_including_prelude(self_fid, ident)
             .map_err(|e| e.into_err(0))?;
+        let variants = raw_variants
+            .iter()
+            .filter(|(params, _)| params.len() >= atleast_params)
+            .collect::<Vec<_>>();
+
         let funcid = match variants.len() {
             1 => match &ident.anot {
-                Some(anot) => variants.get(anot.as_slice()).ok_or_else(|| {
-                    ParseFault::FunctionVariantNotFound(
-                        ident.clone(),
-                        anot.iter()
-                            .cloned()
-                            .map(MaybeType::Known)
-                            .collect::<Vec<_>>(),
-                        fid,
-                    )
-                    .into_err(0)
-                })?,
-                None => variants.values().next().unwrap(),
+                Some(anot) => variants
+                    .iter()
+                    .find(|(k, _v)| k.as_slice() == anot.as_slice())
+                    .map(|(_, id)| id)
+                    .ok_or_else(|| {
+                        ParseFault::FunctionVariantNotFound(
+                            ident.clone(),
+                            anot.iter()
+                                .cloned()
+                                .map(MaybeType::Known)
+                                .collect::<Vec<_>>(),
+                            fid,
+                        )
+                        .into_err(0)
+                    })?,
+                None => variants.iter().next().map(|(_, funcid)| funcid).unwrap(),
             },
             _ => match &ident.anot {
-                Some(anot) => variants.get(anot.as_slice()).ok_or_else(|| {
-                    ParseFault::FunctionVariantNotFound(
-                        ident.clone(),
-                        anot.iter()
-                            .cloned()
-                            .map(MaybeType::Known)
-                            .collect::<Vec<_>>(),
-                        fid,
-                    )
-                    .into_err(0)
-                })?,
+                Some(anot) => variants
+                    .iter()
+                    .find(|(k, _v)| k.as_slice() == anot.as_slice())
+                    .map(|(_, v)| v) // We only want to keep the function id
+                    .ok_or_else(|| {
+                        ParseFault::FunctionVariantNotFound(
+                            ident.clone(),
+                            anot.iter()
+                                .cloned()
+                                .map(MaybeType::Known)
+                                .collect::<Vec<_>>(),
+                            fid,
+                        )
+                        .into_err(0)
+                    })?,
                 None => {
                     return Err(ParseFault::FunctionConversionRequiresAnnotation(
                         ident.clone(),
-                        variants.clone(),
+                        raw_variants.clone(),
                     )
                     .into_err(0))
                 }
             },
         };
-        let func = &self.parser.modules[fid].functions[*funcid];
-        let meta = ast::Meta {
-            fid,
-            ident: func.name.clone(),
-            return_type: func.returns.clone(),
-            identifiers: func
-                .parameter_names
-                .iter()
-                .cloned()
-                .zip(
-                    func.parameter_types
-                        .iter()
-                        .cloned()
-                        .enumerate()
-                        .map(|(i, t)| ast::IdentMeta {
-                            use_counter: 0,
-                            r#type: MaybeType::Known(t),
-                            ident: Identifiable::Param(i),
-                        }),
-                )
-                .collect(),
-        };
-        let (t, findex) = self.build_function(meta, &func.body)?;
-        Ok((t, &func.parameter_types, findex))
+        Ok((fid, **funcid))
     }
 
     pub fn build_function(
@@ -138,66 +128,34 @@ impl<'a> IrBuilder {
                 }
 
                 match call {
-                    ast::Callable::Func(ident) => {
-                        match meta.try_use(&ident.name) {
-                            Some(identmeta) => match identmeta.ident {
+                    ast::Callable::Func(ident) => match meta.try_use(&ident.name) {
+                        Some(identmeta) => {
+                            let ir = match identmeta.ident {
                                 Identifiable::Param(id) => {
-                                    let r#type = match &identmeta.r#type {
-                                        MaybeType::Infer(mt) => mt.borrow().clone().unwrap(),
-                                        MaybeType::Known(t) => t.clone(),
-                                    };
-                                    if let Type::Function(box (takes, gives)) = r#type {
-                                        if takes.len() != param_types.len() {
-                                            return Err(ParseFault::ParamCallAmountMismatch(
-                                                Box::new((takes, gives, param_types)),
-                                            )
-                                            .into_err(token.pos())
-                                            .fallback_fid(meta.fid));
-                                        }
-                                        if takes.len() != param_types.len() {
-                                            return Err(ParseFault::ParamCallAmountMismatch(
-                                                Box::new((takes, gives, param_types)),
-                                            )
-                                            .into_err(token.pos())
-                                            .fallback_fid(meta.fid));
-                                        }
-                                        for (i, take) in takes.iter().enumerate() {
-                                            if *take != param_types[i].clone().unwrap() {
-                                                return Err(ParseFault::ParamCallMismatch(
-                                                    Box::new((takes, gives, param_types)),
-                                                )
-                                                .into_err(token.pos())
-                                                .fallback_fid(meta.fid));
-                                            }
-                                        }
-                                        Ok((
-                                            MaybeType::Known(gives.clone()),
-                                            ir::Entity::ParameterCall(id as u32, evaluated_params),
-                                        ))
-                                    } else {
-                                        Err(ParseFault::ParamCannotTakeParameters(Box::new((
-                                            r#type,
-                                            param_types,
-                                        )))
-                                        .into_err(token.pos())
-                                        .fallback_fid(meta.fid))
-                                    }
+                                    ir::Entity::ParameterCall(id as u32, evaluated_params)
                                 }
-                                _ => unimplemented!("{:?}", identmeta),
-                            },
-                            None => {
-                                let (t, findex) = self
-                                    .find_and_build_function(meta.fid, ident, &mut param_types)
-                                    .map_err(|e| {
-                                        e.fallback_index(token.pos()).fallback_fid(meta.fid)
-                                    })?;
-                                Ok((
-                                    MaybeType::Known(t),
-                                    ir::Entity::FunctionCall(findex as u32, evaluated_params),
-                                ))
-                            }
+                                Identifiable::Captured(id) => {
+                                    ir::Entity::CapturedCall(id as u32, evaluated_params)
+                                }
+                                _ => unimplemented!(),
+                            };
+                            let (_takes, gives) =
+                                destruct_callable_ident(identmeta.r#type.clone(), param_types)
+                                    .map_err(|e| e.into_err(token.pos()))?;
+                            Ok((MaybeType::Known(gives), ir))
                         }
-                    }
+                        None => {
+                            let (t, findex) = self
+                                .find_and_build_function(meta.fid, ident, &mut param_types)
+                                .map_err(|e| {
+                                    e.fallback_index(token.pos()).fallback_fid(meta.fid)
+                                })?;
+                            Ok((
+                                MaybeType::Known(t),
+                                ir::Entity::FunctionCall(findex as u32, evaluated_params),
+                            ))
+                        }
+                    },
                     ast::Callable::Builtin(ident) => {
                         let (id, nt) = ir::bridge::get_funcid(&ident.name)
                             .map_err(|e| e.into_err(token.pos()).fallback_fid(meta.fid))?;
@@ -235,76 +193,65 @@ impl<'a> IrBuilder {
                     }
                 }
             }
-            ast::Entity::Pass(pass) => match pass {
-                // `map #func [1,2,3]`
-                // is actually just turned into
-                // `map #(\n -> func n) [1,2,3]`
-                // the ir optimizer should take care of indirection if that becomes a problem
-                ast::Passable::Func(ident) => match meta.try_use(&ident.name) {
-                    Some(im) => match im.ident {
-                        Identifiable::Param(n) => {
-                            Ok((im.r#type.clone(), ir::Entity::Parameter(n as u16)))
+            ast::Entity::Pass(pass) => {
+                match pass {
+                    // `map #func [1,2,3]`
+                    // is actually just turned into
+                    // `map #(\n -> func n) [1,2,3]`
+                    // the ir optimizer should take care of indirection if that becomes a problem
+                    ast::Passable::Func(ident) => {
+                        let lambda = self.wrap_into_lambda(ident.clone(), Vec::new(), meta)?;
+                        self.build(&Tracked::new(lambda).set(token.pos()), meta)
+                    }
+                    ast::Passable::PartialFunc(callable, pre_given) => match callable {
+                        ast::Callable::Func(ident) => {
+                            // We turn #(f x) into #(\...p -> f x ...p)
+                            let lambda =
+                                self.wrap_into_lambda(ident.clone(), pre_given.clone(), meta)?;
+                            self.build(&Tracked::new(lambda).set(token.pos()), meta)
                         }
                         _ => unimplemented!(),
                     },
-                    None => {
-                        let (t, param_types, findex) = self
-                            .find_and_build_only_suitable(meta.fid, ident)
-                            .map_err(|e| e.fallback_index(token.pos()).fallback_fid(meta.fid))?;
-                        Ok((
-                            MaybeType::Known(Type::Function(Box::new((param_types.to_vec(), t)))),
-                            ir::Entity::LambdaPointer(Box::new((
-                                ir::Entity::FunctionCall(
-                                    findex as u32,
-                                    vec![ir::Entity::Parameter(0)],
-                                ),
-                                vec![],
-                            ))),
-                        ))
-                    }
-                },
-                ast::Passable::PartialFunc(ident, pre_given) => {
-                    unimplemented!("{:?}", token);
-                }
-                ast::Passable::Lambda(param_names, lambda_token) => {
-                    let mut new_meta = meta.clone();
-                    let mut infered_param_types = param_names
-                        .iter()
-                        .map(|ident| {
-                            if let Some(anots) = &ident.anot {
-                                if let Some(anot) = anots.get(0) {
-                                    MaybeType::Known(anot.clone())
+                    ast::Passable::Lambda(param_names, lambda_token) => {
+                        let mut new_meta = meta.clone();
+                        let mut infered_param_types = param_names
+                            .iter()
+                            .map(|ident| {
+                                if let Some(anots) = &ident.anot {
+                                    if let Some(anot) = anots.get(0) {
+                                        MaybeType::Known(anot.clone())
+                                    } else {
+                                        MaybeType::new()
+                                    }
                                 } else {
                                     MaybeType::new()
                                 }
-                            } else {
-                                MaybeType::new()
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    new_meta.lambda_swap(param_names, infered_param_types.as_slice());
+                            })
+                            .collect::<Vec<_>>();
+                        new_meta.lambda_swap(param_names, infered_param_types.as_slice());
 
-                    let (t, v) = self.build(lambda_token, &mut new_meta)?;
-                    let to_capture = meta.was_used(&new_meta);
-                    Ok((
-                        MaybeType::Known(Type::Function(Box::new((
-                            infered_param_types
-                                .drain(0..)
-                                .map(|t| t.unwrap())
-                                .collect::<Vec<_>>(),
-                            t.unwrap(),
-                        )))),
-                        ir::Entity::LambdaPointer(Box::new((v, to_capture))),
-                    ))
+                        let (t, v) = self.build(lambda_token, &mut new_meta)?;
+                        let to_capture = meta.was_used(&new_meta);
+                        Ok((
+                            MaybeType::Known(Type::Function(Box::new((
+                                infered_param_types
+                                    .drain(0..)
+                                    .map(|t| t.unwrap())
+                                    .collect::<Vec<_>>(),
+                                t.unwrap(),
+                            )))),
+                            ir::Entity::LambdaPointer(Box::new((v, to_capture))),
+                        ))
+                    }
+                    ast::Passable::Value(inlinable) => Ok((
+                        (MaybeType::Known(Type::Function(Box::new((vec![], inlinable.into()))))),
+                        ir::Entity::LambdaPointer(Box::new((
+                            ir::Entity::Inlined(inlinable.clone().into()),
+                            vec![],
+                        ))),
+                    )),
                 }
-                ast::Passable::Value(inlinable) => Ok((
-                    (MaybeType::Known(Type::Function(Box::new((vec![], inlinable.into()))))),
-                    ir::Entity::LambdaPointer(Box::new((
-                        ir::Entity::Inlined(inlinable.clone().into()),
-                        vec![],
-                    ))),
-                )),
-            },
+            }
             ast::Entity::If(branches, else_do) => self
                 .if_expression(branches, else_do, meta)
                 .map_err(|e| e.fallback_index(token.pos()).fallback_fid(meta.fid)),
@@ -457,5 +404,104 @@ impl<'a> IrBuilder {
             MaybeType::Known(last_t),
             ir::Entity::FirstStatement(ir::First::from(buf)),
         ))
+    }
+
+    fn wrap_into_lambda(
+        &'a self,
+        ident: Identifier<Type>,
+        mut parameters: Vec<Tracked<ast::Entity>>,
+        meta: &mut Meta,
+    ) -> Result<ast::Entity, ParseError> {
+        let (want, _returns): (&[Type], _) = match meta.try_use(&ident.name) {
+            Some(im) => match &im.r#type {
+                MaybeType::Known(Type::Function(box (takes, gives))) => (&takes, gives),
+                MaybeType::Known(other) => panic!("ET: This cannot take parameters: {:?}", other),
+                MaybeType::Infer(t) => unimplemented!(),
+            },
+            None => {
+                let (fid, funcid) = self.find_only_suitable(meta.fid, &ident, parameters.len())?;
+                let func = &self.parser.modules[fid].functions[funcid];
+                (&func.parameter_types, &func.returns)
+            }
+        };
+
+        let mut fake_params = Vec::new();
+        for i in 0..(want.len() - parameters.len()) {
+            let param = vec![digit_to_letter(i)];
+            let body = Identifier::try_from(String::from_utf8(param).unwrap().as_str()).unwrap();
+            fake_params.push(body.clone());
+            parameters.push(Tracked::new(ast::Entity::SingleIdent(body)));
+        }
+
+        let call = ast::Callable::Func(ident);
+        let lambda_body = Tracked::new(ast::Entity::Call(call, parameters));
+
+        let generated_ast =
+            ast::Entity::Pass(ast::Passable::Lambda(fake_params, Box::new(lambda_body)));
+        Ok(generated_ast)
+    }
+}
+
+// 1 2 3 -> a b c
+// used for generated faking lambda parameters for turning #(f x) into #(\a b -> f x a b)
+fn digit_to_letter(digit: usize) -> u8 {
+    (digit + 97) as u8
+}
+
+fn destruct_callable_ident(
+    mt: MaybeType,
+    param_types: Vec<MaybeType>,
+) -> Result<(Vec<Type>, Type), ParseFault> {
+    let t = match mt {
+        MaybeType::Infer(mt) => mt.borrow().clone().unwrap(),
+        MaybeType::Known(t) => t.clone(),
+    };
+    if let Type::Function(box (takes, gives)) = t {
+        if takes.len() != param_types.len() {
+            return Err(ParseFault::ParamCallAmountMismatch(Box::new((
+                takes,
+                gives,
+                param_types,
+            ))));
+        }
+        if takes.len() != param_types.len() {
+            return Err(ParseFault::ParamCallAmountMismatch(Box::new((
+                takes,
+                gives,
+                param_types,
+            ))));
+        }
+        for (i, take) in takes.iter().enumerate() {
+            match &param_types[i] {
+                MaybeType::Known(t) => {
+                    if *t != *take {
+                        return Err(ParseFault::ParamCallMismatch(Box::new((
+                            takes,
+                            gives,
+                            param_types,
+                        ))));
+                    }
+                }
+                MaybeType::Infer(t) => {
+                    if let Some(t) = t.borrow().as_ref() {
+                        if *t != *take {
+                            return Err(ParseFault::ParamCallMismatch(Box::new((
+                                takes,
+                                gives,
+                                param_types.clone(),
+                            ))));
+                        }
+                        continue;
+                    }
+                    *t.borrow_mut() = Some(take.clone());
+                }
+            }
+        }
+        Ok((takes, gives))
+    } else {
+        Err(ParseFault::ParamCannotTakeParameters(Box::new((
+            t,
+            param_types,
+        ))))
     }
 }
