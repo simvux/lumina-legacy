@@ -34,7 +34,7 @@ fn fmt p (person -> string)
     p.name <> " (" <> str p.age <> ")"
 
 fn swap_data f p ((a -> a) person -> person)
-    { p | data = f p.data }
+    { p data << f p.data }
 
 fn prompt m (string)
     first io:puts m
@@ -57,8 +57,12 @@ fn verify_age age (int -> int)
 fn main
     io:puts
         << swap_data #(\data -> data + 1)
-        << \p -> { p | age = if p.age < 0 then 0 else p.age }
-        << { person | name = prompt "What's your name?", age = age, data = 20 }
+        << { age 
+            if p.age < 0 
+              then 0 
+              else p.age 
+           }
+        << { person name << prompt "What's your name?", age age, data 20 }
       where age = 
         verify_age << unwrap_or 18 << try_str (prompt "what's your age?")
 ```
@@ -85,6 +89,7 @@ fn main
 ```
 
 ### Powerful record syntax
+note: record syntax still in design phase
 ```haskell
 type point
     x int 
@@ -92,11 +97,11 @@ type point
 
 fn main
     -- modify the point coming from pipe
-    { y = 3 }
+    { y 3 }
     -- modify the point assigned to 'p'
-    << \p -> { p | x = 1 }
+    << \p -> { p x << 1 + 1, y 0 }
     -- initialize new instance of point
-    << { point | x = 2, y = 1 }
+    << { point x 2, y 1 }
 ```
 
 ### Function Parameters
@@ -176,7 +181,7 @@ The project is not yet in an usable state but we're getting there!
  - [ ] Implement conversions between the primitive types
  - [x] Add logic operations (if, elif, else)
  - [x] Swap out string identifier to vec indexes at parse-time for huge performance boosts
- - [ ] Add { a | field = } and { field = } 
+ - [ ] Add { structure field, value } and { field, } 
  - [ ] Add match expressions (and patterns?)
  - [x] Add lambda support
  - [x] Implement function to closure conversion using '#'
