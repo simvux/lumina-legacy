@@ -366,6 +366,19 @@ impl FunctionBuilder {
     pub fn get_parameter_type(&self, pid: usize) -> &Type {
         &self.parameter_types[pid]
     }
+
+    pub fn number_of_generics(&self) -> usize {
+        self.parameter_types
+            .iter()
+            .filter(|t| {
+                if let Type::Generic(_) = t {
+                    true
+                } else {
+                    false
+                }
+            })
+            .count()
+    }
 }
 
 impl fmt::Debug for FunctionBuilder {

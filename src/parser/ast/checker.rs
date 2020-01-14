@@ -14,7 +14,7 @@ impl<'a> IrBuilder {
     ) -> Result<(Type, usize), ParseError> {
         let (entry, meta) = self
             .parser
-            .find_func((self_fid, name, params.as_slice()))
+            .find_func_meta(self_fid, name, params.as_slice())
             .map_err(|e| e.into_err(0))?;
         if self.is_completed(&meta) {
             let findex = self.gen_id(&meta);
@@ -288,7 +288,7 @@ impl<'a> IrBuilder {
                     const NO_PARAMS: &[MaybeType] = &[];
                     let (entry, meta) = self
                         .parser
-                        .find_func((meta.fid, ident, NO_PARAMS))
+                        .find_func_meta(meta.fid, ident, NO_PARAMS)
                         .map_err(|e| {
                             if let ParseFault::FunctionNotFound(_, _) = e {
                                 ParseFault::IdentifierNotFound(ident.name.clone())

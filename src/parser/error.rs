@@ -309,8 +309,10 @@ impl fmt::Display for ParseError {
                 )
             }
             FunctionVariantNotFound(ident, params, fid) => {
-                let module = &parser.modules[*fid];
-                let variants = &module.function_ids[&ident.name];
+                // TODO: This only shows from one module. 
+                let (fid, variants) = parser.functions_named(*fid, ident).unwrap()[0];
+                let module = &parser.modules[fid];
+                
                 match variants.len() {
                     1 => {
                         let (wanted_params, funcid) = {

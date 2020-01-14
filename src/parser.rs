@@ -23,7 +23,7 @@ mod error;
 mod operator;
 pub use error::*;
 pub use leafmod::ParseModule;
-mod seekable;
+mod picker;
 mod tracked;
 pub use tracked::Tracked;
 mod attribute;

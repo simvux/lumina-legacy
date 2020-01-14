@@ -74,7 +74,7 @@ impl Hash for MaybeType {
 impl Type {
     pub fn decoded(self, generics: &HashMap<u8, Type>) -> Self {
         match self {
-            Type::Generic(n) => generics[&n].clone(),
+            Type::Generic(n) => generics.get(&n).cloned().unwrap_or(Type::Generic(n)),
             Type::List(box t) => Type::List(Box::new(t.decoded(generics))),
             Type::Function(attr) => {
                 // TODO: Clone can be avoided

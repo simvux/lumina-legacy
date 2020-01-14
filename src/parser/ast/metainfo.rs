@@ -1,6 +1,7 @@
 use super::Type;
 use crate::ir::Capturable;
-use crate::parser::{Attr, Identifier, MaybeType};
+use crate::parser::{Attr, FunctionBuilder, Identifier, MaybeType, ParseFault};
+use std::convert::TryFrom;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -95,6 +96,37 @@ impl Meta {
         let identmeta = self.identifier_mut(name)?;
         identmeta.use_counter += 1;
         Some(identmeta)
+    }
+
+    pub fn identifiers_from(
+        func: &FunctionBuilder,
+        given: &[MaybeType],
+    ) -> Vec<(String, IdentMeta)> {
+        let params = func
+            .parameter_names
+            .iter()
+            .cloned()
+            .zip(func.parameter_types.iter().cloned())
+            .enumerate()
+            .map(|(i, (n, _t))| {
+                // TODO: Might wanna add an assertion of `t` and given[i] here
+                (
+                    n,
+                    IdentMeta {
+                        use_counter: 0,
+                        ident: Identifiable::Param(i),
+                        r#type: given[i].clone(),
+                    },
+                )
+            });
+        /*
+        let wheres = func.wheres.iter().enumerate().map(|(i, (n, e))| IdentMeta {
+            use_counter: 0,
+            ident: Identifiable::Where
+        })
+        return params.chain(wheres).collect();
+        */
+        params.collect()
     }
 }
 
