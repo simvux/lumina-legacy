@@ -13,7 +13,6 @@ impl Parser {
         let mut matches = matches_of(variants, |got| {
             if got.len() == params.len() {
                 are_compatible(params, got)
-            // params.iter().zip(got.iter()).all(is_compatible)
             } else {
                 false
             }
@@ -140,7 +139,7 @@ fn are_compatible(want: &[MaybeType], got: &[Type]) -> bool {
     want.iter().zip(got.iter()).all(|(want, got)| match want {
         MaybeType::Infer(t) => {
             if let Some(existing) = t.borrow().as_ref() {
-                generic_cmp(&mut generics, existing, got);
+                return generic_cmp(&mut generics, existing, got);
             }
             let decoded = got.clone().decoded(&generics);
             if let Type::Generic(_) = &decoded {
@@ -175,6 +174,9 @@ fn generic_cmp(generics: &mut HashMap<u8, Type>, left: &Type, right: &Type) -> b
         }
         Type::Function(box (takes, gives)) => {
             if let Type::Function(box (left_takes, left_gives)) = left {
+                if takes.len() != left_takes.len() {
+                    return false;
+                }
                 let params_ok = takes
                     .iter()
                     .enumerate()

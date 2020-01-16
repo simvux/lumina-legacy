@@ -426,8 +426,8 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
         }
     }
 
+    // forever loop while `next() == ,` then on `== ]` return. On other then error
     fn run_list(&mut self) -> Result<Entity, ParseError> {
-        // forever loop while `next() == ,` then on `== ]` return. On other then error
         let mut buf = Vec::new();
 
         // edge-case for empty lists
@@ -458,4 +458,5 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             }
         }
     }
+    // fn run_record(&mut self) -> Result<Entity, ParseError> {}
 }

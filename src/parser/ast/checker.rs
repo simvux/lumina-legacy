@@ -208,7 +208,7 @@ impl<'a> IrBuilder {
                             // We turn #(f x) into #(\...p -> f x ...p)
                             let lambda =
                                 self.wrap_into_lambda(ident.clone(), pre_given.clone(), meta)?;
-                            self.build(&Tracked::new(lambda).set(token.pos()), meta)
+                            self.build(&Tracked::new(lambda.clone()).set(token.pos()), meta)
                         }
                         _ => unimplemented!(),
                     },
@@ -229,7 +229,6 @@ impl<'a> IrBuilder {
                             })
                             .collect::<Vec<_>>();
                         new_meta.lambda_swap(param_names, infered_param_types.as_slice());
-
                         let (t, v) = self.build(lambda_token, &mut new_meta)?;
                         let to_capture = meta.was_used(&new_meta);
                         Ok((

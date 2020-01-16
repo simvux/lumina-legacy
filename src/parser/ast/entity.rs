@@ -26,7 +26,7 @@ impl fmt::Display for Callable {
                     .iter()
                     .map(|t| fmt::Display::to_string(t))
                     .collect::<Vec<_>>()
-                    .join(""),
+                    .join(" "),
                 body
             ),
         }
@@ -63,7 +63,7 @@ impl fmt::Display for Passable {
                     .iter()
                     .map(|t| fmt::Display::to_string(t))
                     .collect::<Vec<_>>()
-                    .join(""),
+                    .join(" "),
                 body
             ),
         }

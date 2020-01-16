@@ -132,8 +132,7 @@ impl fmt::Display for Entity {
                 for cap in captures.iter() {
                     write!(f, "{} ", cap)?;
                 }
-                write!(f, "}} ")?;
-                write!(f, ">>")?;
+                write!(f, "}}")?;
                 write!(f, " {})", params.first().unwrap())
             }
             Entity::LambdaPointer(box (body, captures)) => {
@@ -142,8 +141,7 @@ impl fmt::Display for Entity {
                 for cap in captures.iter() {
                     write!(f, " {}", cap)?;
                 }
-                write!(f, "}} ")?;
-                write!(f, ">>")?;
+                write!(f, "}}")?;
                 write!(f, " {})", body)
             }
             Entity::Unimplemented => write!(f, "unimp"),
