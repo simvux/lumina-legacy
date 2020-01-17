@@ -32,9 +32,14 @@ fn main() {
         environment.help_message();
         return;
     }
-    match run(environment) {
+    match run(environment.clone()) {
         Ok(_main_returns) => {}
-        Err(e) => println!("{}", e),
+        Err(e) => {
+            println!("{}", e);
+            if environment.panicky {
+                panic!("leaf encountered an error");
+            }
+        }
     };
 }
 
@@ -130,6 +135,7 @@ mod tests {
                 }),
             entrypoint: PathBuf::from_str(path).unwrap(),
             entrypoint_name: name.into(),
+            panicky: true,
             output: Output {
                 ir: false,
                 ast_full: false,
@@ -143,7 +149,10 @@ mod tests {
         let environment = Rc::new(environment);
 
         match run(environment) {
-            Err(e) => panic!("{}", e),
+            Err(e) => {
+                println!("{}", e);
+                panic!("leaf encountered an error")
+            }
             Ok(_) => {}
         }
     }

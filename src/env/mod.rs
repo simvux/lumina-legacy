@@ -12,6 +12,7 @@ pub struct Environment {
     pub entrypoint_name: String,
     pub output: Output,
     pub optimize: bool,
+    pub panicky: bool,
 }
 
 impl Environment {
@@ -27,6 +28,7 @@ impl Environment {
                         .to_owned()
                 }),
             optimize: true,
+            panicky: false,
             output: Output::default(),
         }
     }

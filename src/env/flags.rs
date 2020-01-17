@@ -35,6 +35,13 @@ const ARGS: &[(&[&str], &str, fn(&mut Environment))] = &[
             env.output.ast_entry = true;
         },
     ),
+    (
+        &["--panicky"],
+        "Panics on leaf compiler error (used for tests)",
+        |env| {
+            env.panicky = true;
+        },
+    ),
 ];
 
 impl Environment {
