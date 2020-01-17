@@ -23,7 +23,9 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             None => return Err(ParseFault::EmptyParen.into_err(0)),
         };
         match t.inner {
-            RawToken::Header(_) => Err(ParseFault::EmptyParen.into_err(t.pos())),
+            RawToken::Header(_) | RawToken::Key(Key::Where) => {
+                Err(ParseFault::EmptyParen.into_err(t.pos()))
+            }
             RawToken::Key(Key::ParenOpen) => {
                 let paren_pos = t.pos();
                 self.tokenizer.next();
@@ -229,6 +231,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 Ok(params)
             }
             RawToken::Header(_)
+            | RawToken::Key(Key::Where)
             | RawToken::Key(Key::ParenClose)
             | RawToken::Key(Key::Then)
             | RawToken::Key(Key::Else)

@@ -240,6 +240,14 @@ impl Parser {
                         self.modules[fid].imports.insert(name, usefid);
                     }
                 },
+                RawToken::Key(Key::Where) => {
+                    let (name, entity) = self.tokenize_where(&mut tokenizer)?;
+                    let func = self.modules[fid]
+                        .functions
+                        .last_mut()
+                        .unwrap_or_else(|| panic!("ET: Cannot start with where"));
+                    func.wheres.push((name, entity));
+                }
                 RawToken::NewLine => continue,
                 _ => {
                     // We only want top-level headers here
@@ -272,6 +280,27 @@ impl Parser {
         // Fork and tokenize this module first instead.
         let usefid = self.tokenize(file_path, source_code.chars())?;
         Ok(usefid)
+    }
+
+    fn tokenize_where<I: Iterator<Item = char>>(
+        &mut self,
+        tokenizer: &mut Tokenizer<I>,
+    ) -> Result<(String, Tracked<ast::Entity>), ParseError> {
+        /*
+        let first = tokenizer.next().unwrap();
+        let name = if let RawToken::Identifier(ident) = first {
+            ident
+        } else {
+            ParseFault::GotButExpected(
+                first.inner,
+                vec![RawToken::Identifier(
+                    Identifier::try_from("where identifier").unwrap(),
+                )],
+            )
+            .into_err(first.pos())
+        };
+        */
+        unimplemented!();
     }
 
     pub fn variants_including_prelude(
