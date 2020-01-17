@@ -313,9 +313,56 @@ impl FunctionBuilder {
                     tokenizer.next();
                     continue;
                 }
+                RawToken::Key(Key::Where) => {
+                    tokenizer.next();
+                    return self.parse_where(tokenizer);
+                }
                 other => return Err(ParseFault::Unexpected(other.clone()).into_err(t.pos())),
             }
         }
+        Ok(())
+    }
+
+    fn parse_where<I: Iterator<Item = char>>(
+        &mut self,
+        tokenizer: &mut Tokenizer<I>,
+    ) -> Result<(), ParseError> {
+        let (first, pos) = match tokenizer.next() {
+            None => panic!("ET"),
+            Some(f) => f.sep(),
+        };
+        let name = if let RawToken::Identifier(ident) = first {
+            ident
+        } else {
+            return Err(
+                ParseFault::GotButExpected(first, vec!["where identifier".into()]).into_err(pos),
+            );
+        };
+
+        // Should I make them functions? `where add x y =` I could just add function syntax and then turn it into a
+        // lambda.
+        //
+        // Ye that's pretty convenient. Lets do that. Although how will we make the errors not
+        // trash then?
+        //
+        // Eh, lets just make people do lambdas if they want their where statements be functions.
+
+        match tokenizer.next() {
+            None => return Err(ParseFault::EndedWhileExpecting(vec!["=".into()]).into_err(pos)),
+            Some(after) => {
+                if match after.inner {
+                    RawToken::Identifier(ident) => ident.name != "=",
+                    _ => true,
+                } {
+                    unimplemented!()
+                }
+            }
+        }
+
+        let mut builder = ast::AstBuilder::new(tokenizer);
+        let entity = builder.run_chunk()?;
+        self.wheres.push((name.name, entity));
+
         Ok(())
     }
 
