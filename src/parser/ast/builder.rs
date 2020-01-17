@@ -149,10 +149,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 Some((other, pos)) => {
                     return Err(ParseFault::GotButExpected(
                         other,
-                        vec![
-                            RawToken::Identifier("lambda parameter".try_into().unwrap()),
-                            RawToken::Key(Key::Arrow),
-                        ],
+                        vec!["lambda parameter".into(), "->".into()],
                     )
                     .into_err(pos))
                 }
@@ -202,11 +199,9 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                         params.insert(0, v);
                         Ok(params)
                     }
-                    Some((other, pos)) => Err(ParseFault::GotButExpected(
-                        other,
-                        vec![RawToken::Key(Key::ParenClose)],
-                    )
-                    .into_err(pos)),
+                    Some((other, pos)) => {
+                        Err(ParseFault::GotButExpected(other, vec![")".into()]).into_err(pos))
+                    }
                     None => Err(ParseFault::Unmatched(Key::ParenOpen).into_err(0)),
                 }
             }
@@ -390,7 +385,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                     _ => {
                         return Err(ParseFault::GotButExpected(
                             after,
-                            vec![RawToken::Key(Key::Elif), RawToken::Key(Key::Else)],
+                            vec!["elif".into(), "else".into()],
                         )
                         .into_err(pos));
                     }
@@ -451,11 +446,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 }
                 Some((RawToken::Key(Key::Comma), _)) => continue,
                 Some((other, pos)) => {
-                    return Err(ParseFault::GotButExpected(
-                        other,
-                        vec![RawToken::Key(Key::Comma), RawToken::Key(Key::ListClose)],
+                    return Err(
+                        ParseFault::GotButExpected(other, vec![",".into(), "]".into()])
+                            .into_err(pos),
                     )
-                    .into_err(pos))
                 }
                 None => return Err(ParseFault::Unmatched(Key::ListOpen).into_err(0)),
             }

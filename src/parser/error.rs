@@ -101,8 +101,8 @@ impl<'a, T> Into<Result<T, ParseError>> for ParseError {
 
 #[derive(Debug)]
 pub enum ParseFault {
-    EndedWhileExpecting(Vec<RawToken>),
-    GotButExpected(RawToken, Vec<RawToken>),
+    EndedWhileExpecting(Vec<String>),
+    GotButExpected(RawToken, Vec<String>),
     ModuleLoadNotFound(Vec<String>),
     ModuleLoadFailed(PathBuf, io::ErrorKind),
     NotValidType(String),

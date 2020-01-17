@@ -212,11 +212,9 @@ impl Parser {
                         let ident = match tokenizer.next().map(|t| t.inner) {
                             Some(RawToken::Identifier(ident)) => ident,
                             None => {
-                                return ParseFault::EndedWhileExpecting(vec![RawToken::Identifier(
-                                    Identifier::raw("Identifier"),
-                                )])
-                                .into_err(tokenizer.position - 1)
-                                .into()
+                                return ParseFault::EndedWhileExpecting(vec!["identifier".into()])
+                                    .into_err(tokenizer.position - 1)
+                                    .into()
                             }
                             Some(other) => {
                                 panic!("ET: Unexpected thing after `use` keyword: {:?}", other)
@@ -255,12 +253,7 @@ impl Parser {
                         source_index,
                         ParseFault::GotButExpected(
                             token.inner,
-                            vec![
-                                RawToken::Header(Header::Function),
-                                RawToken::Header(Header::Enum),
-                                RawToken::Header(Header::Type),
-                                RawToken::Header(Header::Operator),
-                            ],
+                            vec!["fn".into(), "type".into(), "enum".into(), "where".into()],
                         ),
                     )
                     .into();

@@ -37,7 +37,7 @@ impl FunctionBuilder {
     ) -> Result<Self, ParseError> {
         let t = match tokenizer.next() {
             None => {
-                return ParseFault::EndedWhileExpecting(vec![RawToken::Key(Key::ParenOpen)])
+                return ParseFault::EndedWhileExpecting(vec!["(".into()])
                     .into_err(0)
                     .into()
             }
@@ -47,7 +47,7 @@ impl FunctionBuilder {
             RawToken::Key(Key::ParenOpen) => {}
             _ => {
                 let source_index = t.pos();
-                return ParseFault::GotButExpected(t.inner, vec![RawToken::Key(Key::ParenOpen)])
+                return ParseFault::GotButExpected(t.inner, vec!["(".into()])
                     .into_err(source_index)
                     .into();
             }
