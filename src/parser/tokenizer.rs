@@ -30,6 +30,9 @@ impl<I: Iterator<Item = char>> From<Peekable<I>> for Tokenizer<I> {
 
 impl<I: Iterator<Item = char>> Tokenizer<I> {
     pub fn skip_spaces_and_newlines(&mut self) {
+        if self.pending.last().map(|t| &t.inner) == Some(&RawToken::NewLine) {
+            self.next();
+        }
         self.skip_until(|c| c != '\n' && c != ' ')
     }
     pub fn skip_until(&mut self, predicate: impl Fn(char) -> bool) {
