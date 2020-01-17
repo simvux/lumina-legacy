@@ -327,6 +327,12 @@ impl FunctionBuilder {
         &mut self,
         tokenizer: &mut Tokenizer<I>,
     ) -> Result<(), ParseError> {
+        tokenizer.skip_spaces_and_newlines();
+        // Having a bar here is optional
+        if let Some(RawToken::Key(Key::Bar)) = tokenizer.peek().map(|t| &t.inner) {
+            tokenizer.next();
+        }
+
         let (first, pos) = match tokenizer.next() {
             None => panic!("ET"),
             Some(f) => f.sep(),
@@ -338,14 +344,6 @@ impl FunctionBuilder {
                 ParseFault::GotButExpected(first, vec!["where identifier".into()]).into_err(pos),
             );
         };
-
-        // Should I make them functions? `where add x y =` I could just add function syntax and then turn it into a
-        // lambda.
-        //
-        // Ye that's pretty convenient. Lets do that. Although how will we make the errors not
-        // trash then?
-        //
-        // Eh, lets just make people do lambdas if they want their where statements be functions.
 
         match tokenizer.next() {
             None => return Err(ParseFault::EndedWhileExpecting(vec!["=".into()]).into_err(pos)),
@@ -362,6 +360,11 @@ impl FunctionBuilder {
         let mut builder = ast::AstBuilder::new(tokenizer);
         let entity = builder.run_chunk()?;
         self.wheres.push((name.name, entity));
+
+        tokenizer.skip_spaces_and_newlines();
+        if let Some(RawToken::Key(Key::Bar)) = tokenizer.peek().map(|t| &t.inner) {
+            return self.parse_where(tokenizer);
+        }
 
         Ok(())
     }

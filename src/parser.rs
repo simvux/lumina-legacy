@@ -238,16 +238,6 @@ impl Parser {
                         self.modules[fid].imports.insert(name, usefid);
                     }
                 },
-                /*
-                RawToken::Key(Key::Where) => {
-                    let (name, entity) = self.tokenize_where(&mut tokenizer)?;
-                    let func = self.modules[fid]
-                        .functions
-                        .last_mut()
-                        .unwrap_or_else(|| panic!("ET: Cannot start with where"));
-                    func.wheres.push((name, entity));
-                }
-                */
                 RawToken::NewLine => continue,
                 _ => {
                     // We only want top-level headers here
@@ -258,6 +248,7 @@ impl Parser {
                             vec!["fn".into(), "type".into(), "enum".into(), "where".into()],
                         ),
                     )
+                    .fallback_fid(fid)
                     .into();
                 }
             }
