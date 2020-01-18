@@ -299,7 +299,7 @@ impl<'a> IrBuilder {
                     }
                     Identifiable::Where((fid, funcid), whereid) => {
                         let func = &self.parser.modules[fid].functions[funcid];
-                        self.build(&func.wheres[whereid].1.clone(), meta)
+                        self.build(&func.wheres[whereid].1.clone().set(token.pos()), meta)
                     }
                 },
                 None => {
