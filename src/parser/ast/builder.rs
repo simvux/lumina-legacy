@@ -63,6 +63,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 let v = self.run_list().map_err(|e| e.fallback_index(pos))?;
                 self.run_maybe_operator(Tracked::new(v).set(pos))
             }
+            RawToken::Key(Key::RecordOpen) => {
+                self.tokenizer.next();
+                self.run_record()
+            }
             RawToken::Key(Key::If) => {
                 let pos = t.pos();
                 self.tokenizer.next();
@@ -204,6 +208,11 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                     }
                     None => Err(ParseFault::Unmatched(Key::ParenOpen).into_err(0)),
                 }
+            }
+            RawToken::Key(Key::RecordOpen) => {
+                self.tokenizer.next();
+                let v = self.run_record()?;
+                Ok(vec![v])
             }
             RawToken::Key(Key::Pipe) => {
                 self.tokenizer.next();
@@ -455,5 +464,68 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             }
         }
     }
-    // fn run_record(&mut self) -> Result<Entity, ParseError> {}
+    fn run_record(&mut self) -> Result<Tracked<Entity>, ParseError> {
+        let (name, pos) = match self.tokenizer.next().map(|t| t.sep()) {
+            Some((RawToken::Identifier(ident), pos)) => (ident, pos),
+            None => {
+                return Err(ParseFault::EndedWhileExpecting(vec![
+                    "type name".into(),
+                    "identifier".into(),
+                ])
+                .into_err(0))
+            }
+            Some((other, pos)) => {
+                return Err(ParseFault::GotButExpected(
+                    other,
+                    vec!["type name".into(), "identifier".into()],
+                )
+                .into_err(pos))
+            }
+        };
+
+        match self.tokenizer.next().map(|t| t.sep()) {
+            Some((RawToken::Key(Key::Dot), _)) => {}
+            Some((other, pos)) => {
+                return Err(ParseFault::GotButExpected(other, vec![".".into()]).into_err(pos))
+            }
+            None => return Err(ParseFault::EndedWhileExpecting(vec![".".into()]).into_err(pos)),
+        }
+
+        let fields = self.run_record_fields()?;
+        dbg!(&fields);
+
+        // TODO: Find out wether this is a new instance we're creating, if we're modifying from
+        // scope, or if we're talking from pipe.
+        unimplemented!();
+    }
+
+    fn run_record_fields(&mut self) -> Result<Vec<(String, Tracked<Entity>)>, ParseError> {
+        let (name, pos) = match self.tokenizer.next().map(|t| t.sep()) {
+            Some((RawToken::Identifier(ident), pos)) => (ident.name, pos),
+            None => {
+                return Err(ParseFault::EndedWhileExpecting(vec!["field name".into()]).into_err(0))
+            }
+            Some((other, pos)) => {
+                return Err(
+                    ParseFault::GotButExpected(other, vec!["field name".into()]).into_err(pos)
+                )
+            }
+        };
+
+        let value = self.run_chunk()?;
+
+        let (after, _pos) = match self.tokenizer.next() {
+            None => return Err(ParseFault::EndedWhileExpecting(vec!["}".into()]).into_err(pos)),
+            Some(t) => t.sep(),
+        };
+        match after {
+            RawToken::Key(Key::Comma) => {
+                let mut buf = self.run_record_fields()?;
+                buf.push((name, value));
+                Ok(buf)
+            }
+            RawToken::Key(Key::RecordClose) => Ok(vec![(name, value)]),
+            _ => panic!("ET: Unexpected {:?}", after),
+        }
+    }
 }
