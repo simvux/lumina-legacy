@@ -62,9 +62,10 @@ fn main
               then 0 
               else p.age 
            }
-        << { person . name << prompt "What's your name?", age age, data 20 }
-      where age = 
-        verify_age << unwrap_or 18 << try_str (prompt "what's your age?")
+        << { person . name << prompt msg, age age, data 20 }
+      where 
+        | age = verify_age << unwrap_or 18 << try_str (prompt "what's your age?")
+        | msg = "What's your name?"
 ```
 
 ## Features
