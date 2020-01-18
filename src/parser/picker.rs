@@ -51,7 +51,7 @@ impl Parser {
             fid,
             ident: func.name.clone(),
             return_type,
-            identifiers: ast::Meta::identifiers_from(func, params),
+            identifiers: ast::Meta::identifiers_from(fid, funcid, func, params),
         };
         Ok((&func.body, meta))
     }

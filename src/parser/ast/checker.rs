@@ -137,7 +137,24 @@ impl<'a> IrBuilder {
                                 Identifiable::Captured(id) => {
                                     ir::Entity::CapturedCall(id as u32, evaluated_params)
                                 }
-                                _ => unimplemented!(),
+                                Identifiable::Where((fid, funcid), whereid) => {
+                                    let func = &self.parser.modules[fid].functions[funcid];
+                                    if let (ast::Entity::Lambda(param_names, body), _where_pos) =
+                                        func.wheres[whereid].1.clone().sep()
+                                    {
+                                        // We're evaluating parameters twice here. Although I
+                                        // suppose it's quite a rare edge-case so should we even
+                                        // care?
+                                        let new_ast = ast::Entity::Call(
+                                            ast::Callable::Lambda(param_names, body),
+                                            params.to_vec(),
+                                        );
+                                        let pos = token.pos();
+                                        return self.build(&Tracked::new(new_ast).set(pos), meta);
+                                    } else {
+                                        panic!("ET: This `where` identifier cannot be used as a function");
+                                    }
+                                }
                             };
                             let (_takes, gives) =
                                 destruct_callable_ident(identmeta.r#type.clone(), param_types)
@@ -280,7 +297,10 @@ impl<'a> IrBuilder {
                     Identifiable::Captured(id) => {
                         Ok((found.r#type.clone(), ir::Entity::Captured(id as u16)))
                     }
-                    _ => unimplemented!("{:?}", found),
+                    Identifiable::Where((fid, funcid), whereid) => {
+                        let func = &self.parser.modules[fid].functions[funcid];
+                        self.build(&func.wheres[whereid].1.clone(), meta)
+                    }
                 },
                 None => {
                     // Lets see if it's a constant
@@ -304,9 +324,15 @@ impl<'a> IrBuilder {
                     ))
                 }
             },
-            ast::Entity::Lambda(_, _) => Err(ParseFault::ParameterlessLambda
-                .into_err(token.pos())
-                .fallback_fid(meta.fid)),
+            ast::Entity::Lambda(param_names, body) => {
+                if param_names.is_empty() {
+                    self.build(&body.clone(), meta)
+                } else {
+                    Err(ParseFault::ParameterlessLambda
+                        .into_err(token.pos())
+                        .fallback_fid(meta.fid))
+                }
+            }
         }
     }
 

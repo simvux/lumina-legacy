@@ -1,7 +1,6 @@
 use super::Type;
 use crate::ir::Capturable;
-use crate::parser::{Attr, FunctionBuilder, Identifier, MaybeType, ParseFault};
-use std::convert::TryFrom;
+use crate::parser::{Attr, FunctionBuilder, Identifier, MaybeType};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -99,6 +98,8 @@ impl Meta {
     }
 
     pub fn identifiers_from(
+        fid: usize,
+        funcid: usize,
         func: &FunctionBuilder,
         given: &[MaybeType],
     ) -> Vec<(String, IdentMeta)> {
@@ -119,14 +120,18 @@ impl Meta {
                     },
                 )
             });
-        /*
-        let wheres = func.wheres.iter().enumerate().map(|(i, (n, e))| IdentMeta {
-            use_counter: 0,
-            ident: Identifiable::Where
-        })
-        return params.chain(wheres).collect();
-        */
-        params.collect()
+        let wheres = func.wheres.iter().enumerate().map(|(i, (n, _e))| {
+            (
+                n.clone(),
+                IdentMeta {
+                    use_counter: 0,
+                    r#type: MaybeType::default(),
+                    ident: Identifiable::Where((fid, funcid), i),
+                },
+            )
+        });
+        params.chain(wheres).collect()
+        // params.collect()
     }
 }
 
