@@ -205,3 +205,4 @@ The project is not yet in an usable state but we're getting there!
  - [ ] let...in for strictly evaluated alternative to where statements
  - [x] Add a way to create platform-specific code
  - [ ] Unit testing
+ - [ ] Multi-layered errors
