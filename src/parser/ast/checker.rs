@@ -93,7 +93,9 @@ impl<'a> IrBuilder {
     ) -> Result<(Type, usize), ParseError> {
         let findex = self.gen_id(&meta);
 
-        let (t, ir) = self.build(entry, &mut meta)?;
+        let (t, ir) = self
+            .build(entry, &mut meta)
+            .map_err(|e| e.fallback_fid(meta.fid))?;
         let t = t.unwrap();
         if meta.return_type != Type::Nothing && t != meta.return_type {
             return Err(ParseFault::FnTypeReturnMismatch(Box::new(meta), t).into_err(entry.pos()));

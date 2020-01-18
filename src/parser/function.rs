@@ -430,7 +430,7 @@ impl fmt::Debug for FunctionBuilder {
         let where_statements = self
             .wheres
             .iter()
-            .map(|(name, entry)| format!("where {}: {:?}", name, entry))
+            .map(|(name, entry)| format!("where {}: {}", name, entry))
             .collect::<Vec<String>>()
             .join("\n  ");
         write!(
