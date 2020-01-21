@@ -492,11 +492,13 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
         }
 
         let fields = self.run_record_fields()?;
-        dbg!(&fields);
 
-        // TODO: Find out wether this is a new instance we're creating, if we're modifying from
-        // scope, or if we're talking from pipe.
-        unimplemented!();
+        let entity = Entity::Record(
+            name.try_into().map_err(|e: ParseFault| e.into_err(pos))?,
+            fields,
+        );
+
+        Ok(Tracked::new(entity).set(pos))
     }
 
     fn run_record_fields(&mut self) -> Result<Vec<(String, Tracked<Entity>)>, ParseError> {

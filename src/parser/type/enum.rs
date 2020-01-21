@@ -93,19 +93,6 @@ fn parse_type_arguments<I: Iterator<Item = char>>(
 
 impl fmt::Display for Enum {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "<TODO>")?;
-        for (name, types) in self.fields.iter() {
-            write!(
-                f,
-                "\n    {} {}",
-                name,
-                types
-                    .iter()
-                    .map(|t| fmt::Display::to_string(t))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            )?;
-        }
-        Ok(())
+        write!(f, "<TODO>")
     }
 }

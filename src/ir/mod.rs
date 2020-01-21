@@ -19,6 +19,7 @@ pub enum Entity {
     FirstStatement(self::First<Entity>),
     Parameter(u16),
     Captured(u16),
+    ConstructRecord(Vec<Entity>),
 
     Inlined(Value),
     List(Vec<Entity>),
@@ -87,6 +88,16 @@ impl fmt::Display for Entity {
                 }
                 write!(f, ")")
             }
+            Entity::ConstructRecord(fields) => write!(
+                f,
+                "{{ {} }}",
+                fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| format!("{} {}", i, v))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Entity::FunctionCall(findex, params) => {
                 write!(f, "(call-{}", findex)?;
                 for p in params.iter() {

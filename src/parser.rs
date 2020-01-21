@@ -84,7 +84,7 @@ impl Parser {
         &mut self,
         fid: usize,
         ident: Identifier<Type>,
-        fields: HashMap<String, Type>,
+        fields: Vec<(String, Type)>,
     ) -> usize {
         let module = &mut self.modules[fid];
         let typeid = module.types.len();

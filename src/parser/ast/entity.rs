@@ -79,6 +79,7 @@ pub enum Entity {
         Box<Tracked<Entity>>,
     ),
     First(Vec<Tracked<Entity>>),
+    Record(Identifier<Type>, Vec<(String, Tracked<Entity>)>),
     Lambda(Vec<Identifier<Type>>, Box<Tracked<Entity>>),
     List(Vec<Tracked<Entity>>),
     Inlined(Inlinable),
@@ -139,6 +140,16 @@ impl fmt::Display for Entity {
                     .collect::<Vec<_>>()
                     .join(" and "),
                 branches.last().unwrap()
+            ),
+            Entity::Record(name, fields) => write!(
+                f,
+                "{{ {} . {} }}",
+                name,
+                fields
+                    .iter()
+                    .map(|entity| format!("{} {}", entity.0, entity.1))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
             Entity::Lambda(param_names, body) => write!(
                 f,

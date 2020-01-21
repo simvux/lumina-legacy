@@ -116,6 +116,28 @@ impl Parser {
             .number_of_generics()
             .cmp(&left_f.number_of_generics())
     }
+
+    pub fn find_type(
+        &self,
+        self_fid: usize,
+        ident: &Identifier<Type>,
+    ) -> Result<(usize, usize), ParseFault> {
+        let fid = self.fid_from_path(self_fid, &ident.path);
+        self.modules[fid]
+            .type_ids
+            .get(&ident.name)
+            .copied()
+            .map(|tid| (fid, tid))
+            .ok_or_else(|| ParseFault::TypeNotFound(self_fid, ident.clone()))
+    }
+
+    fn fid_from_path(&self, self_fid: usize, path: &[String]) -> usize {
+        match path.len() {
+            0 => self_fid,
+            1 => self.modules[self_fid].imports[path.last().as_ref().unwrap().as_str()],
+            _ => panic!("ET: Invalid path length"),
+        }
+    }
 }
 
 type Variants<'a> = Vec<(usize, &'a HashMap<Vec<Type>, usize>)>;

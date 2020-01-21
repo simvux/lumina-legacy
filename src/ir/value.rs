@@ -7,6 +7,7 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),
+    Struct(Box<Vec<Value>>),
     // I want *actually* captured here, not to be captured.
     Function(Box<(super::Entity, Vec<Value>)>),
 
@@ -36,6 +37,16 @@ impl fmt::Display for Value {
             Value::Int(n) => write!(f, "{}", n),
             Value::Float(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
+            Value::Struct(fields) => write!(
+                f,
+                "{}",
+                fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| format!("{} {}", i, v))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Value::Function(box (body, _captured)) => write!(f, "f({})", body),
             Value::List(list) => {
                 write!(f, "[")?;

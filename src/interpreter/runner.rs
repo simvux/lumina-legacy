@@ -80,7 +80,7 @@ impl<'a> Runner<'a> {
                         self.params.clone_param(*paramid as usize)
                     {
                         // TODO: Fix memory management
-                        return self.spawn(&entity, evaluated_params, captured.clone());
+                        return self.spawn(&entity, evaluated_params, captured);
                     } else {
                         unreachable!();
                     }
@@ -91,7 +91,7 @@ impl<'a> Runner<'a> {
                         self.captured[*capid as usize].clone()
                     {
                         // TODO: Fix memory management
-                        return self.spawn(&entity, evaluated_params, captured.clone());
+                        return self.spawn(&entity, evaluated_params, captured);
                     } else {
                         unreachable!();
                     }
@@ -133,6 +133,7 @@ impl<'a> Runner<'a> {
                     }
                     return Value::Function(Box::new((inner.clone(), captured)));
                 }
+                Entity::ConstructRecord(fields) => return self.record(fields),
                 Entity::Unimplemented => panic!("TODO: Unimplemented escapes"),
                 Entity::Unique => unreachable!(),
             }
@@ -156,6 +157,15 @@ impl<'a> Runner<'a> {
                     .map(|p| self.spawn(p, self.params.clone(), self.captured.clone())),
             ),
         }
+    }
+
+    fn record(self, fields: &'a [Entity]) -> Value {
+        let mut buf = Vec::with_capacity(fields.len());
+        for entity in fields {
+            let v = self.spawn(entity, self.params.clone(), self.captured.clone());
+            buf.push(v);
+        }
+        Value::Struct(Box::new(buf))
     }
 
     fn rust_call(mut self, index: Bridged, rust_params: &'a [Entity]) -> Value {

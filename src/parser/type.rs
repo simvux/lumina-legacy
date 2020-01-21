@@ -23,7 +23,26 @@ pub enum Type {
     Struct(i32, i32),
     Function(Box<(Vec<Type>, Type)>),
 
-    External(Box<(String, Type)>), // This one is all wrong
+    // TODO: I'm not sure how to handle this.
+    // Because the same type won't cause a match if they're called from different modules.
+    // Which of course is wrong. Lets take a look at how they're stored, maybe we can get away with
+    // (usize, usize) here instead and evaluate the ast identifier when encountered from it's
+    // current scope to discover the actual source of the type. Ye I think that's the way to go!
+    // Lets try it.
+    //
+    // Lets just keep in mind that this would require us to add an extra layer in the error.rs
+    // which deserializes the Type::Custom's using the parser.
+
+    // hm no I don't think (usize, usize) will work. Because remember; We store these as
+    // encountered declerations, but they might be used before a decleration.
+    // Maybe we store it as (FilePath, Identifier<Type>) instead?
+    //
+    // or `(usize, Identifier<Type>)` makes more sense.
+    //
+    // I think we're gonna have to create a new type instead of Identifier<Type>. Maybe I want to
+    // create an "Annotated<>" type. And then have
+    // Identifier<Type>      -> Annotated<Identifier, A=Type>
+    // CustomTypeName<Type>  -> Annotated<String, A=Type>
     Custom(Identifier<Type>),
 }
 
@@ -262,7 +281,6 @@ impl fmt::Display for Type {
             ),
             Type::List(inner) => write!(f, "[{}]", inner.to_string()),
             Type::Struct(fid, tid) => write!(f, "Struct({}:{})", fid, tid),
-            Type::External(box (modname, t)) => write!(f, "{}:{}", modname, t.to_string()),
             Type::Custom(name) => write!(f, "unevaluated type {}", name),
         }
     }

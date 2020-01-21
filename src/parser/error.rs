@@ -114,6 +114,8 @@ pub enum ParseFault {
     BridgedFunctionNotFound(Identifier<Type>),
     BridgedFunctionNoMode(u8),
     ParameterlessLambda,
+    TypeNotFound(usize, Identifier<Type>),
+    RecordWithEnum(usize, Identifier<Type>),
     Unexpected(RawToken),
     UnexpectedWantedParameter(RawToken),
     Unmatched(Key),
@@ -221,6 +223,8 @@ impl fmt::Display for ParseError {
             BridgedWrongPathLen(entries) => write!(f, "`{}` wrong length of path", entries.join(":")),
             BridgedFunctionNotFound(ident) => write!(f, "No bridged function named `{}`", ident),
             BridgedFunctionNoMode(c) => write!(f, "Bridged path mode doesn't exist, got `{}`", c),
+            TypeNotFound(_fid, ident) => write!(f, "Type `{}` not found", ident.name),
+            RecordWithEnum(_fid, ident) => write!(f, "You're trying to construct a record however, `{}` is an enum and not a struct", ident),
             FunctionConversionRequiresAnnotation(ident, variants) => {
                 write!(f, "This function conversion requires a type annotation. I don't know which of these variants to use.\n  {}", variants.keys().map(|params| {
                     format_function_header(&ident.name, Some(params), NO)
@@ -561,5 +565,6 @@ fn describe(entity: &ast::Entity) -> &str {
         Entity::Inlined(_) => "value",
         Entity::SingleIdent(_) => "identifier",
         Entity::Unimplemented => "unimplemented",
+        Entity::Record(_, _) => "record",
     }
 }

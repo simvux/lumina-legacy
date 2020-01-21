@@ -1,6 +1,8 @@
 use super::IrBuilder;
 use crate::ir;
-use crate::parser::{ast, Identifier, MaybeType, ParseError, ParseFault, Tracked, Type};
+use crate::parser::{
+    ast, r#type::CustomType, Identifier, MaybeType, ParseError, ParseFault, Tracked, Type,
+};
 use std::convert::TryFrom;
 
 use super::{Identifiable, Meta};
@@ -274,6 +276,9 @@ impl<'a> IrBuilder {
                 .if_expression(branches, else_do, meta)
                 .map_err(|e| e.fallback_index(token.pos()).fallback_fid(meta.fid)),
             ast::Entity::First(branches) => self.first_statement(branches, meta),
+            ast::Entity::Record(ident, fields) => self
+                .record(ident, fields, meta)
+                .map_err(|e| e.fallback_fid(token.pos())),
             ast::Entity::List(branches) => self.list(branches, meta),
             ast::Entity::SingleIdent(ident) => match meta.try_use(&ident.name) {
                 Some(found) => match found.ident {
@@ -333,6 +338,49 @@ impl<'a> IrBuilder {
                     Err(ParseFault::ParameterlessLambda
                         .into_err(token.pos())
                         .fallback_fid(meta.fid))
+                }
+            }
+        }
+    }
+
+    fn record(
+        &'a self,
+        ident: &Identifier<Type>,
+        fields: &[(String, Tracked<ast::Entity>)],
+        meta: &mut Meta,
+    ) -> Result<(MaybeType, ir::Entity), ParseError> {
+        match meta.try_use(&ident.name) {
+            Some(local) => {
+                // We're modifying a struct in the current scope
+                unimplemented!();
+            }
+            None => {
+                // We're constructing a new struct
+                let (fid, tid) = self
+                    .parser
+                    .find_type(meta.fid, &ident)
+                    .map_err(|e| e.into_err(0))?;
+                // TODO:
+                // I think I'm gonna just create code for creating a new record
+                // and then reuse that code for modyfing records by just reusing the scoped fields
+                // in the new one.
+                match &self.parser.modules[fid].types[tid] {
+                    CustomType::Struct(r#struct) => {
+                        let sorted = r#struct.copy_order_for(fields);
+                        let mut evaluated_fields = Vec::with_capacity(sorted.len());
+                        for (entity, expected_t) in sorted.iter() {
+                            let (t, ir) = self.build(entity, meta)?;
+                            if t.unwrap() != *expected_t {
+                                panic!("ET");
+                            }
+                            evaluated_fields.push(ir);
+                        }
+                        let ir = ir::Entity::ConstructRecord(evaluated_fields);
+                        unimplemented!();
+                    }
+                    CustomType::Enum(r#enum) => {
+                        Err(ParseFault::RecordWithEnum(fid, ident.clone()).into_err(0))
+                    }
                 }
             }
         }
