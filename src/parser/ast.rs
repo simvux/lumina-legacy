@@ -1,9 +1,8 @@
 use crate::env::Environment;
 use crate::ir;
-use crate::parser::{Identifier, MaybeType, ParseError, Parser, Type};
+use crate::parser::{Anot, Identifier, MaybeType, ParseError, Parser, Type};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::rc::Rc;
 
 mod checker;
@@ -51,7 +50,7 @@ impl IrBuilder {
     ) -> Result<(Vec<ir::Entity>, usize), ParseError> {
         let (_returns, assigned_index) = match self.find_and_build_function(
             fid,
-            &Identifier::try_from(name).unwrap(),
+            &Anot::from((Identifier::raw(name), vec![])),
             &mut params.to_vec(),
         ) {
             Ok(a) => a,

@@ -104,7 +104,7 @@ impl<I: Iterator<Item = char>> Tokenizer<I> {
             match c {
                 '<' => {
                     // Hack to make annotations parse correctly
-                    if let Some(last) = buf.chars().rev().nth(0) {
+                    if let Some(last) = buf.chars().rev().next() {
                         if NAME_CHARS.contains(last) {
                             self.walk();
                             // It's an annotation to previous
@@ -222,7 +222,7 @@ pub trait TokenSource: Iterator<Item = Token> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{Identifier, IdentifierType, Inlinable};
+    use crate::parser::{Anot, Identifier, Inlinable};
 
     fn test(code: &str) -> Vec<RawToken> {
         let iter = code.chars().peekable();
@@ -233,23 +233,13 @@ mod tests {
         RawToken::Inlined(Inlinable::Int(n))
     }
     fn func(path: &str) -> RawToken {
-        ident(path, IdentifierType::Normal)
+        ident(path)
     }
     fn oper(path: &str) -> RawToken {
-        ident(path, IdentifierType::Operator)
+        ident(path)
     }
-    fn ident(path: &str, kind: IdentifierType) -> RawToken {
-        let mut path = path
-            .split(|c| c == ':')
-            .map(|s| s.to_owned())
-            .collect::<Vec<String>>();
-        let name = path.pop().unwrap();
-        RawToken::Identifier(Identifier {
-            name,
-            path,
-            kind,
-            anot: None,
-        })
+    fn ident(path: &str) -> RawToken {
+        RawToken::Identifier(Anot::new(Identifier::try_from(path).unwrap()))
     }
 
     #[test]

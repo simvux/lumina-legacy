@@ -1,6 +1,6 @@
 use crate::env::Environment;
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::TryFrom;
 use std::fmt;
 use std::fs::File;
 use std::io::Read;
@@ -30,6 +30,8 @@ mod attribute;
 pub use attribute::Attr;
 mod identifier;
 pub use identifier::{Identifier, IdentifierType, NAME_CHARS};
+mod annotation;
+pub use annotation::Anot;
 
 const PRELUDE_FID: usize = 0;
 
@@ -63,7 +65,7 @@ impl Parser {
     fn new_function(&mut self, fid: usize, funcb: FunctionBuilder) -> usize {
         let module = &mut self.modules[fid];
         let funcid = module.functions.len();
-        match module.function_ids.get_mut(&funcb.name.name) {
+        match module.function_ids.get_mut(&funcb.name.inner.name) {
             Some(existing) => {
                 existing.insert(funcb.parameter_types.clone(), funcid);
                 module.functions.push(funcb);
@@ -73,7 +75,7 @@ impl Parser {
                 let mut hashmap = HashMap::with_capacity(1);
                 let name = funcb.name.clone();
                 hashmap.insert(funcb.parameter_types.clone(), funcid);
-                module.function_ids.insert(name.name, hashmap);
+                module.function_ids.insert(name.inner.name, hashmap);
                 module.functions.push(funcb);
                 funcid
             }
@@ -83,14 +85,14 @@ impl Parser {
     fn new_type(
         &mut self,
         fid: usize,
-        ident: Identifier<Type>,
+        ident: Anot<Identifier, Type>,
         fields: Vec<(String, Type)>,
     ) -> usize {
         let module = &mut self.modules[fid];
         let typeid = module.types.len();
         let (name, type_args) = {
             // TODO: type_args
-            (ident.name, vec![])
+            (ident.inner.name, vec![])
         };
         module.type_ids.insert(name, typeid);
         module
@@ -101,14 +103,14 @@ impl Parser {
     fn new_enum(
         &mut self,
         fid: usize,
-        ident: Identifier<Type>,
+        ident: Anot<Identifier, Type>,
         fields: HashMap<String, Vec<Type>>,
     ) -> usize {
         let module = &mut self.modules[fid];
         let typeid = module.types.len();
         let (name, type_args) = {
             // TODO: type_args
-            (ident.name, vec![])
+            (ident.inner.name, vec![])
         };
         if module.type_ids.insert(name, typeid).is_some() {
             panic!("ET: Type already exists");
@@ -175,8 +177,12 @@ impl Parser {
             match token.inner {
                 RawToken::Header(h) => match h {
                     Header::Function => {
-                        let mut funcb = FunctionBuilder::new().with_header(&mut tokenizer)?;
-                        if funcb.name.is_targeted_sys() {
+                        let mut funcb = FunctionBuilder::new()
+                            .with_header(&mut tokenizer)
+                            .map_err(|e| e.fallback_fid(fid).fallback_index(source_index))?;
+                        if funcb.name.anot.is_empty()
+                            || funcb.name.anot.iter().any(|attr| attr.is_targeted_sys())
+                        {
                             funcb
                                 .parse_body(&mut tokenizer)
                                 .map_err(|e| e.fallback_index(source_index).fallback_fid(fid))?;
@@ -220,13 +226,11 @@ impl Parser {
                                 panic!("ET: Unexpected thing after `use` keyword: {:?}", other)
                             }
                         };
-                        let name = ident.name.clone();
-                        let file_path = module_path.fork_from(
-                            ident
-                                .try_into()
-                                .map_err(|e: ParseFault| e.into_err(source_index))?,
-                            &*self.environment,
-                        );
+                        let name = ident.inner.name.clone();
+                        let ident = ident
+                            .try_map_anot(|s| Type::try_from(s.as_str()))
+                            .map_err(|e| e.into_err(source_index))?;
+                        let file_path = module_path.fork_from(ident, &*self.environment);
 
                         let usefid = self
                             .tokenize_import(file_path)
@@ -271,20 +275,20 @@ impl Parser {
     pub fn variants_including_prelude(
         &self,
         self_fid: usize,
-        ident: &Identifier<Type>,
+        ident: &Anot<Identifier, Type>,
     ) -> Result<(&HashMap<Vec<Type>, usize>, usize), ParseFault> {
         let fid = {
-            match ident.path.len() {
+            match ident.inner.path.len() {
                 0 => self_fid,
                 1 => {
-                    let mod_name = &ident.path[0];
+                    let mod_name = &ident.inner.path[0];
                     self.modules[self_fid].get_import(mod_name)?
                 }
-                _ => return Err(ParseFault::InvalidPath(ident.path.clone())),
+                _ => return Err(ParseFault::InvalidPath(ident.inner.path.clone())),
             }
         };
 
-        match self.modules[fid].function_ids.get(&ident.name) {
+        match self.modules[fid].function_ids.get(&ident.inner.name) {
             Some(variants) => Ok((variants, fid)),
             None => {
                 // Wasn't find, so lets try prelude variants
@@ -292,7 +296,7 @@ impl Parser {
                     if let Some(variants) = self
                         .modules
                         .get(PRELUDE_FID)
-                        .and_then(|m| m.function_ids.get(&ident.name))
+                        .and_then(|m| m.function_ids.get(&ident.inner.name))
                     {
                         return Ok((variants, fid));
                     }

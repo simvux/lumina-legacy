@@ -14,34 +14,34 @@ pub enum Attr {
 
 impl Attr {
     #[cfg(target_os = "windows")]
-    pub fn is_targeted_sys(self) -> Option<bool> {
+    pub fn is_targeted_sys(self) -> bool {
         match self {
-            Attr::Windows => Some(true),
-            Attr::Linux | Attr::Macos | Attr::Unix => Some(false),
+            Attr::Windows => true,
+            Attr::Linux | Attr::Macos | Attr::Unix => false,
         }
     }
 
     #[cfg(target_os = "linux")]
-    pub fn is_targeted_sys(self) -> Option<bool> {
+    pub fn is_targeted_sys(self) -> bool {
         match self {
-            Attr::Linux => Some(true),
-            Attr::Windows | Attr::Macos | Attr::Unix => Some(false),
+            Attr::Linux => true,
+            Attr::Windows | Attr::Macos | Attr::Unix => false,
         }
     }
 
     #[cfg(target_os = "unix")]
-    pub fn is_targeted_sys(self) -> Option<bool> {
+    pub fn is_targeted_sys(self) -> bool {
         match self {
-            Attr::Unix => Some(true),
-            Attr::Linux | Attr::Macos | Attr::Windows => Some(false),
+            Attr::Unix => true,
+            Attr::Linux | Attr::Macos | Attr::Windows => false,
         }
     }
 
     #[cfg(target_os = "macos")]
-    pub fn is_targeted_sys(self) -> Option<bool> {
+    pub fn is_targeted_sys(self) -> bool {
         match self {
-            Attr::Macos => Some(true),
-            Attr::Linux | Attr::Unix | Attr::Windows => Some(false),
+            Attr::Macos => true,
+            Attr::Linux | Attr::Unix | Attr::Windows => false,
         }
     }
 
@@ -51,8 +51,8 @@ impl Attr {
         target_os = "windows",
         target_os = "unix"
     )))]
-    pub fn is_targeted_sys(self) -> Option<bool> {
-        Some(false)
+    pub fn is_targeted_sys(self) -> bool {
+        false
     }
 }
 
@@ -63,6 +63,7 @@ impl TryFrom<&str> for Attr {
         let attr = match s {
             "windows" => Attr::Windows,
             "linux" => Attr::Linux,
+            "macos" | "darwin" => Attr::Macos,
             _ => return Err(ParseFault::UnrecognizedAttribute(s.to_owned())),
         };
         Ok(attr)

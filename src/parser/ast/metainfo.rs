@@ -1,6 +1,6 @@
 use super::Type;
 use crate::ir::Capturable;
-use crate::parser::{Attr, FunctionBuilder, Identifier, MaybeType};
+use crate::parser::{Anot, Attr, FunctionBuilder, Identifier, MaybeType};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -32,7 +32,7 @@ impl Hash for IdentMeta {
 #[derive(Default, Clone, Eq, PartialEq, Hash)]
 pub struct Meta {
     pub fid: usize,
-    pub ident: Identifier<Attr>,
+    pub ident: Anot<Identifier, Attr>,
     pub return_type: Type,
     pub identifiers: Vec<(String, IdentMeta)>,
 }
@@ -67,7 +67,7 @@ impl Meta {
         captured
     }
     // Turns parameters into captured values and appends new parameters. This is used when encountering lambdas.
-    pub fn lambda_swap(&mut self, params: &[Identifier<Type>], known_types: &[MaybeType]) {
+    pub fn lambda_swap(&mut self, params: &[Anot<Identifier, Type>], known_types: &[MaybeType]) {
         let mut captured_n = 0;
         for (_, im) in self.identifiers.iter_mut() {
             if let Identifiable::Param(_) = im.ident {
@@ -78,10 +78,10 @@ impl Meta {
         }
         for (i, ident) in params.iter().enumerate() {
             self.identifiers.push((
-                ident.name.clone(),
+                ident.inner.name.clone(),
                 IdentMeta {
                     use_counter: 0,
-                    r#type: match ident.anot.as_ref().and_then(|a| a.get(0)) {
+                    r#type: match ident.anot.get(0) {
                         Some(t) => MaybeType::Known(t.clone()),
                         None => known_types[i].clone(),
                     },
@@ -141,7 +141,7 @@ impl fmt::Debug for Meta {
             f,
             "fn {}:{} {} ({} -> {})  |{}|",
             self.fid,
-            self.ident.name,
+            self.ident.inner.name,
             self.identifiers
                 .iter()
                 .filter_map(|(k, v)| if let Identifiable::Param(_) = v.ident {

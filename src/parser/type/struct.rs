@@ -1,9 +1,9 @@
 use super::Type;
 use crate::parser::{
-    ast, tokenizer::TokenSource, Identifier, ParseError, ParseFault, RawToken, Tokenizer, Tracked,
+    ast, tokenizer::TokenSource, Anot, Identifier, ParseError, ParseFault, RawToken, Tokenizer,
+    Tracked,
 };
-use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fmt;
 
 pub struct Struct {
@@ -55,7 +55,7 @@ impl fmt::Display for Struct {
 
 pub fn parse<I: Iterator<Item = char>>(
     tokenizer: &mut Tokenizer<I>,
-) -> Result<(Identifier<Type>, Vec<(String, Type)>), ParseError> {
+) -> Result<(Anot<Identifier, Type>, Vec<(String, Type)>), ParseError> {
     let first = tokenizer.next().ok_or_else(|| panic!("ET"))?;
     let type_ident_pos = first.pos();
     let type_ident = if let RawToken::Identifier(ident) = first.inner {
@@ -86,21 +86,17 @@ pub fn parse<I: Iterator<Item = char>>(
                     }
                 } else {
                     // This field line was the last in the file
-                    return Ok((
-                        type_ident
-                            .try_into()
-                            .map_err(|e: ParseFault| e.into_err(type_ident_pos))?,
-                        fields,
-                    ));
+                    let type_ident = type_ident
+                        .try_map_anot(|s| Type::try_from(s.as_str()))
+                        .map_err(|e| e.into_err(type_ident_pos))?;
+                    return Ok((type_ident, fields));
                 }
             }
             None => {
-                return Ok((
-                    type_ident
-                        .try_into()
-                        .map_err(|e: ParseFault| e.into_err(type_ident_pos))?,
-                    fields,
-                ))
+                let type_ident = type_ident
+                    .try_map_anot(|s| Type::try_from(s.as_str()))
+                    .map_err(|e| e.into_err(type_ident_pos))?;
+                return Ok((type_ident, fields));
             }
         }
     }
@@ -116,9 +112,9 @@ fn parse_field<I: Iterator<Item = char>>(
             let (field_name_ident, _field_pos) = assume!(RawToken::Identifier, tokenizer.next());
             let (second, pos) = tokenizer.next().ok_or_else(|| panic!("ET"))?.sep();
             if let RawToken::Identifier(field_type_ident) = second {
-                let t =
-                    Type::try_from(field_type_ident.name.as_str()).map_err(|e| e.into_err(pos))?;
-                Ok(Some((field_name_ident.name, t)))
+                let t = Type::try_from(field_type_ident.inner.name.as_str())
+                    .map_err(|e| e.into_err(pos))?;
+                Ok(Some((field_name_ident.inner.name, t)))
             } else {
                 panic!("ET {:?} cannot be used as field type", second);
             }

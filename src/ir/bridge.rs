@@ -1,4 +1,4 @@
-use crate::parser::{Identifier, ParseFault, Type};
+use crate::parser::{Anot, ParseFault, Type};
 use std::convert::TryFrom;
 use std::fmt;
 use strum_macros::{AsRefStr, EnumString};
@@ -65,8 +65,8 @@ pub fn get_funcid(ident: &str) -> Result<(Bridged, NaiveType), ParseFault> {
         "append" => (append, NaiveType::Matching(0)),
         _ => {
             return Err(ParseFault::BridgedFunctionNotFound(
-                Identifier::try_from(ident).unwrap(),
-            ))
+                Anot::try_from(ident)?.try_map_anot(|s| Type::try_from(s.as_str()))?,
+            ));
         }
     };
     Ok(id)

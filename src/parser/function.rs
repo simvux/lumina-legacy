@@ -1,9 +1,8 @@
 use super::{
-    ast, ast::AstBuilder, tokenizer::TokenSource, Attr, Identifier, Key, ParseError, ParseFault,
-    RawToken, Tokenizer, Tracked, Type,
+    ast, ast::AstBuilder, tokenizer::TokenSource, Anot, Attr, Identifier, Key, ParseError,
+    ParseFault, RawToken, Tokenizer, Tracked, Type,
 };
 use std::convert::TryFrom;
-use std::convert::TryInto;
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -12,7 +11,7 @@ use std::hash::Hasher;
 // (operators are turned into functions)
 #[derive(Default, Clone)]
 pub struct FunctionBuilder {
-    pub name: Identifier<Attr>,
+    pub name: Anot<Identifier, Attr>,
     pub parameter_names: Vec<String>,
     pub parameter_types: Vec<Type>,
     pub returns: Type,
@@ -42,7 +41,7 @@ impl Hash for FunctionBuilder {
 impl FunctionBuilder {
     pub fn new() -> Self {
         FunctionBuilder {
-            name: Identifier::default(),
+            name: Anot::default(),
             parameter_names: Vec::new(),
             parameter_types: Vec::new(),
             returns: Type::default(),
@@ -65,10 +64,12 @@ impl FunctionBuilder {
         };
         self.name = match first.sep() {
             (RawToken::Identifier(ident), pos) => {
-                if !ident.path.is_empty() {
+                if !ident.inner.path.is_empty() {
                     panic!("ET: Path in function name");
                 }
-                ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?
+                ident
+                    .try_map_anot(|s| Attr::try_from(s.as_str()))
+                    .map_err(|e| e.into_err(pos))?
             }
             (other, pos) => {
                 return ParseFault::GotButExpected(other, vec!["function name".into()])
@@ -99,7 +100,7 @@ impl FunctionBuilder {
             };
             match next.inner {
                 RawToken::NewLine => return Ok(self),
-                RawToken::Identifier(ident) => self.parameter_names.push(ident.name),
+                RawToken::Identifier(ident) => self.parameter_names.push(ident.inner.name),
                 RawToken::Key(Key::ParenOpen) => return self.with_parameter_types(tokenizer),
                 _ => {
                     let source_index = next.pos();
@@ -138,7 +139,8 @@ impl FunctionBuilder {
             let source_index = next.pos();
             match next.inner {
                 RawToken::Identifier(ident) => self.parameter_types.push(
-                    Type::try_from(ident.name.as_str()).map_err(|e| e.into_err(source_index))?,
+                    Type::try_from(ident.inner.name.as_str())
+                        .map_err(|e| e.into_err(source_index))?,
                 ),
                 RawToken::Key(Key::ListOpen) => self
                     .parameter_types
@@ -179,7 +181,7 @@ impl FunctionBuilder {
         let r#type = match next.inner {
             RawToken::Key(Key::ListOpen) => Type::List(Box::new(self.parse_list_type(tokenizer)?)),
             RawToken::Identifier(ident) => {
-                Type::try_from(ident.name.as_str()).map_err(|e| e.into_err(source_index))?
+                Type::try_from(ident.inner.name.as_str()).map_err(|e| e.into_err(source_index))?
             }
             _ => {
                 return ParseFault::Unmatched(Key::ParenOpen)
@@ -219,7 +221,8 @@ impl FunctionBuilder {
             let source_index = next.pos();
             match next.inner {
                 RawToken::Identifier(ident) => buf.push(
-                    Type::try_from(ident.name.as_str()).map_err(|e| e.into_err(source_index))?,
+                    Type::try_from(ident.inner.name.as_str())
+                        .map_err(|e| e.into_err(source_index))?,
                 ),
                 RawToken::Key(Key::ListOpen) => {
                     buf.push(Type::List(Box::new(self.parse_list_type(tokenizer)?)))
@@ -264,7 +267,7 @@ impl FunctionBuilder {
         let source_index = next.pos();
         let r#type = match next.inner {
             RawToken::Identifier(ident) => {
-                Type::try_from(ident.name.as_str()).map_err(|e| e.into_err(source_index))?
+                Type::try_from(ident.inner.name.as_str()).map_err(|e| e.into_err(source_index))?
             }
             RawToken::Key(Key::ParenOpen) => {
                 Type::Function(Box::new(self.parse_param_type(tokenizer)?))
@@ -349,7 +352,7 @@ impl FunctionBuilder {
             None => return Err(ParseFault::EndedWhileExpecting(vec!["=".into()]).into_err(pos)),
             Some(after) => {
                 if match after.inner {
-                    RawToken::Identifier(ident) => ident.name != "=",
+                    RawToken::Identifier(ident) => ident.inner.name != "=",
                     _ => true,
                 } {
                     unimplemented!()
@@ -359,7 +362,7 @@ impl FunctionBuilder {
 
         let mut builder = ast::AstBuilder::new(tokenizer);
         let entity = builder.run_chunk()?;
-        self.wheres.push((name.name, entity));
+        self.wheres.push((name.inner.name, entity));
 
         tokenizer.skip_spaces_and_newlines();
         if let Some(RawToken::Key(Key::Bar)) = tokenizer.peek().map(|t| &t.inner) {

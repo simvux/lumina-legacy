@@ -1,9 +1,10 @@
 use super::{Callable, Entity, Passable};
 use crate::parser::tokenizer::TokenSource;
 use crate::parser::{
-    Identifier, IdentifierType, Key, ParseError, ParseFault, RawToken, Tokenizer, Tracked, Type,
+    Anot, Identifier, IdentifierType, Key, ParseError, ParseFault, RawToken, Tokenizer, Tracked,
+    Type,
 };
-use std::convert::TryInto;
+use std::convert::TryFrom;
 
 pub struct AstBuilder<'a, I: Iterator<Item = char>> {
     tokenizer: &'a mut Tokenizer<I>,
@@ -84,12 +85,15 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 self.run_maybe_operator(Tracked::new(v).set(pos))
             }
             RawToken::Identifier(_) => {
-                let (mut ident, pos) = assume!(RawToken::Identifier, self.tokenizer.next());
-                let callable = if ident.path.first().map(|s| s.as_str()) == Some("builtin") {
-                    ident.path.remove(0);
-                    Callable::Builtin(ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?)
+                let (ident, pos) = assume!(RawToken::Identifier, self.tokenizer.next());
+                let mut ident = ident
+                    .try_map_anot(|s| Type::try_from(s.as_str()))
+                    .map_err(|e| e.into_err(pos))?;
+                let callable = if ident.inner.path.first().map(|s| s.as_str()) == Some("builtin") {
+                    ident.inner.path.remove(0);
+                    Callable::Builtin(ident)
                 } else {
-                    Callable::Func(ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?)
+                    Callable::Func(ident)
                 };
                 let v = self
                     .run_maybe_parameterized(Tracked::new(callable).set(pos))
@@ -147,7 +151,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
         let pos = loop {
             match self.tokenizer.next().map(|t| t.sep()) {
                 Some((RawToken::Identifier(ident), pos)) => {
-                    params.push(ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?)
+                    let ident = ident
+                        .try_map_anot(|s| Type::try_from(s.as_str()))
+                        .map_err(|e| e.into_err(pos))?;
+                    params.push(ident)
                 }
                 Some((RawToken::Key(Key::Arrow), pos)) => break pos,
                 Some((other, pos)) => {
@@ -182,14 +189,14 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 Ok(params)
             }
             RawToken::Identifier(ident) => {
-                if let IdentifierType::Operator = ident.kind {
+                if let IdentifierType::Operator = ident.inner.kind {
                     return Ok(Vec::new());
                 }
                 let (ident, pos) = assume!(RawToken::Identifier, self.tokenizer.next());
-                let v = Tracked::new(Entity::SingleIdent(
-                    ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?,
-                ))
-                .set(pos);
+                let ident = ident
+                    .try_map_anot(|s| Type::try_from(s.as_str()))
+                    .map_err(|e| e.into_err(pos))?;
+                let v = Tracked::new(Entity::SingleIdent(ident)).set(pos);
                 let mut params = self.run_parameterized()?;
                 params.insert(0, v);
                 Ok(params)
@@ -279,10 +286,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
             }
             RawToken::Identifier(ident) => {
                 // It's just a direct pass of a function
-                let v = Tracked::new(Passable::Func(
-                    ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?,
-                ))
-                .set(pos);
+                let ident = ident
+                    .try_map_anot(|s| Type::try_from(s.as_str()))
+                    .map_err(|e| e.into_err(pos))?;
+                let v = Tracked::new(Passable::Func(ident)).set(pos);
                 Ok(v)
             }
             RawToken::Inlined(inlinable) => Ok(Tracked::new(Passable::Value(inlinable)).set(pos)),
@@ -313,7 +320,7 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
                 | RawToken::Key(Key::ParenOpen)
                 | RawToken::Key(Key::ClosureMarker)
                 | RawToken::Key(Key::ListOpen) => true,
-                RawToken::Identifier(ident) => !ident.is_operator(),
+                RawToken::Identifier(ident) => !ident.inner.is_operator(),
                 RawToken::NewLine => {
                     self.tokenizer.next();
                     self.next_can_be_parameter()
@@ -333,14 +340,13 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
         };
         match &t.inner {
             RawToken::Identifier(ident) => {
-                if ident.is_operator() {
+                if ident.inner.is_operator() {
                     let (ident, pos) = assume!(RawToken::Identifier, self.tokenizer.next());
+                    let ident = ident
+                        .try_map_anot(|s| Type::try_from(s.as_str()))
+                        .map_err(|e| e.into_err(pos))?;
                     // We don't need to run_maybe_operator here because run_operator already does that
-                    self.run_operator(
-                        left,
-                        Tracked::new(ident.try_into().map_err(|e: ParseFault| e.into_err(pos))?)
-                            .set(pos),
-                    )
+                    self.run_operator(left, Tracked::new(ident).set(pos))
                 } else {
                     Err(ParseFault::Unexpected(t.inner.clone()).into_err(t.pos()))
                 }
@@ -352,10 +358,10 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
     fn run_operator(
         &mut self,
         left: Tracked<Entity>,
-        op: Tracked<Identifier<Type>>,
+        op: Tracked<Anot<Identifier, Type>>,
     ) -> Result<Tracked<Entity>, ParseError> {
         let right = self.run_chunk()?;
-        assert!(op.inner.is_operator());
+        assert!(op.inner.inner.is_operator());
         let (op, pos) = op.sep();
         let v = Tracked::new(Entity::Call(Callable::Func(op), vec![left, right])).set(pos);
         self.run_maybe_operator(v)
@@ -492,18 +498,18 @@ impl<I: Iterator<Item = char>> AstBuilder<'_, I> {
         }
 
         let fields = self.run_record_fields()?;
+        let name = name
+            .try_map_anot(|s| Type::try_from(s.as_str()))
+            .map_err(|e| e.into_err(pos))?;
 
-        let entity = Entity::Record(
-            name.try_into().map_err(|e: ParseFault| e.into_err(pos))?,
-            fields,
-        );
+        let entity = Entity::Record(name, fields);
 
         Ok(Tracked::new(entity).set(pos))
     }
 
     fn run_record_fields(&mut self) -> Result<Vec<(String, Tracked<Entity>)>, ParseError> {
         let (name, pos) = match self.tokenizer.next().map(|t| t.sep()) {
-            Some((RawToken::Identifier(ident), pos)) => (ident.name, pos),
+            Some((RawToken::Identifier(ident), pos)) => (ident.inner.name, pos),
             None => {
                 return Err(ParseFault::EndedWhileExpecting(vec!["field name".into()]).into_err(0))
             }

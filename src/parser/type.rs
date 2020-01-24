@@ -1,5 +1,5 @@
 use super::ParseFault;
-use super::{Identifier, IdentifierType, Inlinable};
+use super::{Anot, Identifier, IdentifierType, Inlinable};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -42,8 +42,11 @@ pub enum Type {
     // I think we're gonna have to create a new type instead of Identifier<Type>. Maybe I want to
     // create an "Annotated<>" type. And then have
     // Identifier<Type>      -> Annotated<Identifier, A=Type>
-    // CustomTypeName<Type>  -> Annotated<String, A=Type>
-    Custom(Identifier<Type>),
+    // CustomTypeName<Type>  -> Annotated<(usize, String), A=Type>
+    //
+    // Although how we're gonna get the fid in here I'm not quite sure. Might just need to change
+    // TryFrom<&str> to TryFrom<(usize, &str)>.
+    Custom(Anot<Identifier, Type>),
 }
 
 pub enum CustomType {
@@ -149,9 +152,9 @@ impl TryFrom<&str> for Type {
             };
         };
         let anot = if has_anot {
-            annotation(&mut iter)
+            annotation(&mut iter).unwrap_or_else(Vec::new)
         } else {
-            None
+            Vec::new()
         };
         assert_eq!(iter.next(), None);
         let t = match tbuf.as_str() {
@@ -162,12 +165,14 @@ impl TryFrom<&str> for Type {
             _ => {
                 let mut path = tbuf.split(':').map(|s| s.to_owned()).collect::<Vec<_>>();
                 let name = path.pop().unwrap();
-                Type::Custom(Identifier {
-                    name,
+                Type::Custom(Anot::from((
+                    Identifier {
+                        name,
+                        path,
+                        kind: IdentifierType::Normal,
+                    },
                     anot,
-                    path,
-                    kind: IdentifierType::Normal,
-                })
+                )))
             }
         };
         Ok(t)
@@ -195,12 +200,14 @@ pub fn splice_to<I: Iterator<Item = char>>(iter: &mut I, points: &str) -> Option
                 let anot = annotation(iter).expect("ET");
                 return Some((
                     '>',
-                    (Type::Custom(Identifier {
-                        path: Vec::new(),
-                        name: s,
-                        anot: Some(anot),
-                        kind: IdentifierType::Normal,
-                    })),
+                    (Type::Custom(Anot::from((
+                        Identifier {
+                            path: Vec::new(),
+                            name: s,
+                            kind: IdentifierType::Normal,
+                        },
+                        anot,
+                    )))),
                 ));
             }
             _ => {}

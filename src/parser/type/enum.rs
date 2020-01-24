@@ -1,9 +1,7 @@
 use super::Type;
-use crate::parser::{
-    tokenizer::TokenSource, Identifier, ParseError, ParseFault, RawToken, Tokenizer,
-};
+use crate::parser::{tokenizer::TokenSource, Anot, Identifier, ParseError, RawToken, Tokenizer};
 use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fmt;
 
 pub struct Enum {
@@ -14,7 +12,7 @@ pub struct Enum {
 
 pub fn parse<I: Iterator<Item = char>>(
     tokenizer: &mut Tokenizer<I>,
-) -> Result<(Identifier<Type>, HashMap<String, Vec<Type>>), ParseError> {
+) -> Result<(Anot<Identifier, Type>, HashMap<String, Vec<Type>>), ParseError> {
     let first = tokenizer.next().ok_or_else(|| panic!("ET"))?;
     let type_ident_pos = first.pos();
     let type_ident = if let RawToken::Identifier(ident) = first.inner {
@@ -42,12 +40,10 @@ pub fn parse<I: Iterator<Item = char>>(
                 }
             }
             None => {
-                return Ok((
-                    type_ident
-                        .try_into()
-                        .map_err(|e: ParseFault| e.into_err(type_ident_pos))?,
-                    fields,
-                ))
+                let type_ident = type_ident
+                    .try_map_anot(|s| Type::try_from(s.as_str()))
+                    .map_err(|e| e.into_err(type_ident_pos))?;
+                return Ok((type_ident, fields));
             }
         }
     }
@@ -62,7 +58,7 @@ fn parse_field<I: Iterator<Item = char>>(
         Some(RawToken::Identifier(_)) => {
             let (field_name_ident, _field_pos) = assume!(RawToken::Identifier, tokenizer.next());
             let type_arguments = parse_type_arguments(tokenizer)?;
-            Ok(Some((field_name_ident.name, type_arguments)))
+            Ok(Some((field_name_ident.inner.name, type_arguments)))
         }
         Some(RawToken::NewLine) => {
             tokenizer.next();
@@ -82,7 +78,7 @@ fn parse_type_arguments<I: Iterator<Item = char>>(
             Some(RawToken::Header(_)) | None | Some(RawToken::NewLine) => return Ok(buf),
             Some(RawToken::Identifier(_)) => {
                 let (type_param_type_name, pos) = assume!(RawToken::Identifier, tokenizer.next());
-                let t = Type::try_from(type_param_type_name.name.as_str())
+                let t = Type::try_from(type_param_type_name.inner.name.as_str())
                     .map_err(|e| e.into_err(pos))?;
                 buf.push(t);
             }

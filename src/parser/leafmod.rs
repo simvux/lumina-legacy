@@ -1,4 +1,4 @@
-use super::{CustomType, FunctionBuilder, Identifier, ParseFault, Type};
+use super::{Anot, CustomType, FunctionBuilder, Identifier, ParseFault, Type};
 use crate::env::Environment;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -95,13 +95,13 @@ impl FileSource {
 
     // Create a new FileSource from the scope of self
     // We search for filepath both from $LEAFPATH and relatively from entrypoint
-    pub fn fork_from(&self, ident: Identifier<Type>, env: &Environment) -> Self {
+    pub fn fork_from(&self, ident: Anot<Identifier, Type>, env: &Environment) -> Self {
         if self.is_entrypoint() {
             FileSource::try_from((&ident, env)).unwrap()
         } else {
             let mut new_module_path = self.clone();
             new_module_path.pop();
-            for level in ident.path.into_iter() {
+            for level in ident.inner.path.into_iter() {
                 new_module_path = new_module_path.join(level);
             }
             new_module_path
@@ -119,27 +119,27 @@ impl fmt::Display for FileSource {
     }
 }
 
-impl TryFrom<(&Identifier<Type>, &Environment)> for FileSource {
+impl TryFrom<(&Anot<Identifier, Type>, &Environment)> for FileSource {
     type Error = ();
 
     fn try_from(
-        (ident, env): (&Identifier<Type>, &Environment),
+        (ident, env): (&Anot<Identifier, Type>, &Environment),
     ) -> Result<FileSource, Self::Error> {
         let mut from_project_path = env.entrypoint.parent().unwrap().to_owned();
 
-        let mut file_postfix = ident.path.join("/");
+        let mut file_postfix = ident.inner.path.join("/");
         file_postfix.push('/');
-        file_postfix.push_str(&ident.name);
+        file_postfix.push_str(&ident.inner.name);
         file_postfix.push_str(".lf");
 
         from_project_path.push(&file_postfix);
 
         if from_project_path.exists() {
-            let mut buf = Vec::with_capacity(ident.path.len() + 1);
-            for p in ident.path.iter().cloned() {
+            let mut buf = Vec::with_capacity(ident.inner.path.len() + 1);
+            for p in ident.inner.path.iter().cloned() {
                 buf.push(p);
             }
-            buf.push(ident.name.clone());
+            buf.push(ident.inner.name.clone());
             return Ok(FileSource::Project(buf));
         }
 
@@ -148,15 +148,15 @@ impl TryFrom<(&Identifier<Type>, &Environment)> for FileSource {
         from_leaf_path.push(file_postfix);
 
         if from_leaf_path.exists() {
-            let mut buf = Vec::with_capacity(ident.path.len() + 1);
-            for p in ident.path.iter().cloned() {
+            let mut buf = Vec::with_capacity(ident.inner.path.len() + 1);
+            for p in ident.inner.path.iter().cloned() {
                 buf.push(p);
             }
-            buf.push(ident.name.clone());
+            buf.push(ident.inner.name.clone());
             return Ok(FileSource::Leafpath(buf));
         }
 
-        panic!("ET: File {:?} not found", ident.name);
+        panic!("ET: File {:?} not found", ident.inner.name);
     }
 }
 

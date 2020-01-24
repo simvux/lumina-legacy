@@ -1,9 +1,8 @@
 use super::IrBuilder;
 use crate::ir;
 use crate::parser::{
-    ast, r#type::CustomType, Identifier, MaybeType, ParseError, ParseFault, Tracked, Type,
+    ast, r#type::CustomType, Anot, Identifier, MaybeType, ParseError, ParseFault, Tracked, Type,
 };
-use std::convert::TryFrom;
 
 use super::{Identifiable, Meta};
 
@@ -11,7 +10,7 @@ impl<'a> IrBuilder {
     pub fn find_and_build_function(
         &'a self,
         self_fid: usize,
-        name: &Identifier<Type>,
+        name: &Anot<Identifier, Type>,
         params: &mut Vec<MaybeType>,
     ) -> Result<(Type, usize), ParseError> {
         let (entry, meta) = self
@@ -20,7 +19,7 @@ impl<'a> IrBuilder {
             .map_err(|e| e.into_err(0))?;
         if self.is_completed(&meta) {
             let findex = self.gen_id(&meta);
-            return Ok((meta.return_type.clone(), findex));
+            return Ok((meta.return_type, findex));
         }
 
         self.build_function(meta, entry)
@@ -29,7 +28,7 @@ impl<'a> IrBuilder {
     pub fn find_only_suitable(
         &'a self,
         self_fid: usize,
-        ident: &Identifier<Type>,
+        ident: &Anot<Identifier, Type>,
         atleast_params: usize,
     ) -> Result<(usize, usize), ParseError> {
         let (raw_variants, fid) = self
@@ -41,49 +40,35 @@ impl<'a> IrBuilder {
             .filter(|(params, _)| params.len() >= atleast_params)
             .collect::<Vec<_>>();
 
-        let funcid = match variants.len() {
-            1 => match &ident.anot {
-                Some(anot) => variants
-                    .iter()
-                    .find(|(k, _v)| k.as_slice() == anot.as_slice())
-                    .map(|(_, id)| id)
-                    .ok_or_else(|| {
-                        ParseFault::FunctionVariantNotFound(
-                            ident.clone(),
-                            anot.iter()
-                                .cloned()
-                                .map(MaybeType::Known)
-                                .collect::<Vec<_>>(),
-                            fid,
-                        )
-                        .into_err(0)
-                    })?,
-                None => variants.iter().next().map(|(_, funcid)| funcid).unwrap(),
-            },
-            _ => match &ident.anot {
-                Some(anot) => variants
-                    .iter()
-                    .find(|(k, _v)| k.as_slice() == anot.as_slice())
-                    .map(|(_, v)| v) // We only want to keep the function id
-                    .ok_or_else(|| {
-                        ParseFault::FunctionVariantNotFound(
-                            ident.clone(),
-                            anot.iter()
-                                .cloned()
-                                .map(MaybeType::Known)
-                                .collect::<Vec<_>>(),
-                            fid,
-                        )
-                        .into_err(0)
-                    })?,
-                None => {
+        let funcid = match ident.anot.len() {
+            0 => {
+                if variants.len() > 1 {
                     return Err(ParseFault::FunctionConversionRequiresAnnotation(
                         ident.clone(),
                         raw_variants.clone(),
                     )
-                    .into_err(0))
+                    .into_err(0));
+                } else {
+                    variants.iter().next().map(|(_, funcid)| funcid).unwrap()
                 }
-            },
+            }
+            _ => variants
+                .iter()
+                .find(|(k, _v)| k.as_slice() == ident.anot.as_slice())
+                .map(|(_, v)| v)
+                .ok_or_else(|| {
+                    ParseFault::FunctionVariantNotFound(
+                        ident.clone(),
+                        ident
+                            .anot
+                            .iter()
+                            .cloned()
+                            .map(MaybeType::Known)
+                            .collect::<Vec<_>>(),
+                        fid,
+                    )
+                    .into_err(0)
+                })?,
         };
         Ok((fid, **funcid))
     }
@@ -132,7 +117,7 @@ impl<'a> IrBuilder {
                 }
 
                 match call {
-                    ast::Callable::Func(ident) => match meta.try_use(&ident.name) {
+                    ast::Callable::Func(ident) => match meta.try_use(&ident.inner.name) {
                         Some(identmeta) => {
                             let ir = match identmeta.ident {
                                 Identifiable::Param(id) => {
@@ -178,7 +163,7 @@ impl<'a> IrBuilder {
                         }
                     },
                     ast::Callable::Builtin(ident) => {
-                        let (id, nt) = ir::bridge::get_funcid(&ident.name)
+                        let (id, nt) = ir::bridge::get_funcid(&ident.inner.name)
                             .map_err(|e| e.into_err(token.pos()).fallback_fid(meta.fid))?;
                         let mt = match nt {
                             ir::bridge::NaiveType::Known(t) => MaybeType::Known(t),
@@ -229,7 +214,7 @@ impl<'a> IrBuilder {
                             // We turn #(f x) into #(\...p -> f x ...p)
                             let lambda =
                                 self.wrap_into_lambda(ident.clone(), pre_given.clone(), meta)?;
-                            self.build(&Tracked::new(lambda.clone()).set(token.pos()), meta)
+                            self.build(&Tracked::new(lambda).set(token.pos()), meta)
                         }
                         _ => unimplemented!(),
                     },
@@ -238,12 +223,8 @@ impl<'a> IrBuilder {
                         let mut infered_param_types = param_names
                             .iter()
                             .map(|ident| {
-                                if let Some(anots) = &ident.anot {
-                                    if let Some(anot) = anots.get(0) {
-                                        MaybeType::Known(anot.clone())
-                                    } else {
-                                        MaybeType::new()
-                                    }
+                                if let Some(anot) = ident.anot.get(0) {
+                                    MaybeType::Known(anot.clone())
                                 } else {
                                     MaybeType::new()
                                 }
@@ -280,7 +261,7 @@ impl<'a> IrBuilder {
                 .record(ident, fields, meta)
                 .map_err(|e| e.fallback_fid(token.pos())),
             ast::Entity::List(branches) => self.list(branches, meta),
-            ast::Entity::SingleIdent(ident) => match meta.try_use(&ident.name) {
+            ast::Entity::SingleIdent(ident) => match meta.try_use(&ident.inner.name) {
                 Some(found) => match found.ident {
                     Identifiable::Param(id) => {
                         if let MaybeType::Known(Type::Function(box (takes, gives))) = &found.r#type
@@ -317,7 +298,7 @@ impl<'a> IrBuilder {
                         .find_func_meta(meta.fid, ident, NO_PARAMS)
                         .map_err(|e| {
                             if let ParseFault::FunctionNotFound(_, _) = e {
-                                ParseFault::IdentifierNotFound(ident.name.clone())
+                                ParseFault::IdentifierNotFound(ident.inner.name.clone())
                             } else {
                                 e
                             }
@@ -345,11 +326,11 @@ impl<'a> IrBuilder {
 
     fn record(
         &'a self,
-        ident: &Identifier<Type>,
+        ident: &Anot<Identifier, Type>,
         fields: &[(String, Tracked<ast::Entity>)],
         meta: &mut Meta,
     ) -> Result<(MaybeType, ir::Entity), ParseError> {
-        match meta.try_use(&ident.name) {
+        match meta.try_use(&ident.inner.name) {
             Some(local) => {
                 // We're modifying a struct in the current scope
                 unimplemented!();
@@ -483,11 +464,11 @@ impl<'a> IrBuilder {
 
     fn wrap_into_lambda(
         &'a self,
-        ident: Identifier<Type>,
+        ident: Anot<Identifier, Type>,
         mut parameters: Vec<Tracked<ast::Entity>>,
         meta: &mut Meta,
     ) -> Result<ast::Entity, ParseError> {
-        let (want, _returns): (&[Type], _) = match meta.try_use(&ident.name) {
+        let (want, _returns): (&[Type], _) = match meta.try_use(&ident.inner.name) {
             Some(im) => match &im.r#type {
                 MaybeType::Known(Type::Function(box (takes, gives))) => (&takes, gives),
                 MaybeType::Known(other) => panic!("ET: This cannot take parameters: {:?}", other),
@@ -503,7 +484,8 @@ impl<'a> IrBuilder {
         let mut fake_params = Vec::new();
         for i in 0..(want.len() - parameters.len()) {
             let param = vec![digit_to_letter(i)];
-            let body = Identifier::try_from(String::from_utf8(param).unwrap().as_str()).unwrap();
+            let body = Anot::new(Identifier::from(String::from_utf8(param).unwrap()));
+
             fake_params.push(body.clone());
             parameters.push(Tracked::new(ast::Entity::SingleIdent(body)));
         }
@@ -529,7 +511,7 @@ fn destruct_callable_ident(
 ) -> Result<(Vec<Type>, Type), ParseFault> {
     let t = match mt {
         MaybeType::Infer(mt) => mt.borrow().clone().unwrap(),
-        MaybeType::Known(t) => t.clone(),
+        MaybeType::Known(t) => t,
     };
     if let Type::Function(box (takes, gives)) = t {
         if takes.len() != param_types.len() {

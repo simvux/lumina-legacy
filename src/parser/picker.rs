@@ -1,4 +1,4 @@
-use super::{ast, Identifier, MaybeType, ParseFault, Parser, Tracked, Type, PRELUDE_FID};
+use super::{ast, Anot, Identifier, MaybeType, ParseFault, Parser, Tracked, Type, PRELUDE_FID};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -6,7 +6,7 @@ impl Parser {
     pub fn find_func(
         &self,
         self_fid: usize,
-        ident: &Identifier<Type>,
+        ident: &Anot<Identifier, Type>,
         params: &[MaybeType],
     ) -> Result<(usize, usize), ParseFault> {
         let variants = self.functions_named(self_fid, ident)?;
@@ -35,7 +35,7 @@ impl Parser {
     pub fn find_func_meta<'a>(
         &'a self,
         self_fid: usize,
-        ident: &Identifier<Type>,
+        ident: &Anot<Identifier, Type>,
         params: &[MaybeType],
     ) -> Result<(&'a Tracked<ast::Entity>, ast::Meta), ParseFault> {
         let (fid, funcid) = self.find_func(self_fid, ident, params)?;
@@ -61,7 +61,7 @@ impl Parser {
     pub fn find_func_only_suitable(
         &self,
         self_fid: usize,
-        ident: &Identifier<Type>,
+        ident: &Anot<Identifier, Type>,
         atleast_params: usize,
     ) -> Result<(usize, usize), ParseFault> {
         let variants = self.functions_named(self_fid, ident)?;
@@ -82,11 +82,11 @@ impl Parser {
     pub fn functions_named<'a>(
         &'a self,
         self_fid: usize,
-        ident: &Identifier<Type>,
+        ident: &Anot<Identifier, Type>,
     ) -> Result<Variants<'a>, ParseFault> {
         let mut all_variants = Vec::new();
 
-        let fid = match ident.path.len() {
+        let fid = match ident.inner.path.len() {
             0 => {
                 if self_fid != PRELUDE_FID {
                     if let Ok(prelude_variants) = self.functions_named(PRELUDE_FID, ident) {
@@ -95,12 +95,24 @@ impl Parser {
                 }
                 self_fid
             }
-            1 => self.modules[self_fid].imports[ident.path.last().as_ref().unwrap().as_str()],
+            1 => {
+                match self.modules[self_fid]
+                    .imports
+                    .get(ident.inner.path.last().as_ref().unwrap().as_str())
+                {
+                    Some(fid) => *fid,
+                    None => {
+                        return Err(ParseFault::ModuleNotImported(
+                            ident.inner.path.last().cloned().unwrap(),
+                        ))
+                    }
+                }
+            }
             _ => panic!("ET: Invalid path length"),
         };
         let module = &self.modules[fid];
 
-        if let Some(variants) = module.function_ids.get(&ident.name) {
+        if let Some(variants) = module.function_ids.get(&ident.inner.name) {
             all_variants.push((fid, variants))
         };
         if all_variants.is_empty() {
@@ -120,12 +132,12 @@ impl Parser {
     pub fn find_type(
         &self,
         self_fid: usize,
-        ident: &Identifier<Type>,
+        ident: &Anot<Identifier, Type>,
     ) -> Result<(usize, usize), ParseFault> {
-        let fid = self.fid_from_path(self_fid, &ident.path);
+        let fid = self.fid_from_path(self_fid, &ident.inner.path);
         self.modules[fid]
             .type_ids
-            .get(&ident.name)
+            .get(&ident.inner.name)
             .copied()
             .map(|tid| (fid, tid))
             .ok_or_else(|| ParseFault::TypeNotFound(self_fid, ident.clone()))

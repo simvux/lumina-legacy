@@ -1,4 +1,4 @@
-use crate::parser::{Identifier, Tracked};
+use crate::parser::{Anot, IdentSource, Identifier, ParseFault, Tracked};
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -14,11 +14,14 @@ pub use operator::Operator;
 pub type Token = Tracked<RawToken>;
 
 impl TryFrom<&str> for RawToken {
-    type Error = ();
+    type Error = ParseFault;
 
     fn try_from(bytes: &str) -> Result<RawToken, Self::Error> {
         if bytes.is_empty() {
-            return Err(());
+            return Err(ParseFault::InvalidIdentifier(
+                String::new(),
+                IdentSource::TypeName,
+            ));
         }
         if let Ok(t) = Header::try_from(bytes) {
             Ok(RawToken::Header(t))
@@ -29,7 +32,10 @@ impl TryFrom<&str> for RawToken {
         } else if bytes == "\n" {
             Ok(RawToken::NewLine)
         } else {
-            Ok(RawToken::Identifier(Identifier::try_from(bytes)?))
+            let anot: Anot<String, String> = Anot::try_from(bytes)?;
+            Ok(RawToken::Identifier(
+                anot.try_map(|s| Identifier::try_from(s.as_str()))?,
+            ))
         }
     }
 }
@@ -42,7 +48,7 @@ pub struct Capture {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum RawToken {
-    Identifier(Identifier<String>),
+    Identifier(Anot<Identifier, String>),
 
     Header(Header),
     Key(Key),
@@ -58,23 +64,7 @@ impl fmt::Display for RawToken {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use RawToken::*;
         match self {
-            Identifier(ident) => write!(
-                f,
-                "{}{}",
-                ident.path.join(":"),
-                ident
-                    .anot
-                    .as_ref()
-                    .map(|anots| format!(
-                        "<{}>",
-                        anots
-                            .iter()
-                            .map(|a| a.to_string())
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    ))
-                    .unwrap_or_else(String::new)
-            ),
+            Identifier(ident) => write!(f, "{}", ident),
             Header(h) => h.fmt(f),
             Key(key) => key.fmt(f),
             Inlined(inlined) => inlined.fmt(f),

@@ -1,12 +1,11 @@
-use crate::parser::tokenizer::Inlinable;
-use crate::parser::{Identifier, Tracked, Type};
+use crate::parser::{tokenizer::Inlinable, Anot, Identifier, Tracked, Type};
 use std::fmt;
 
 #[derive(Clone, Debug)]
 pub enum Callable {
-    Func(Identifier<Type>),
-    Builtin(Identifier<Type>),
-    Lambda(Vec<Identifier<Type>>, Box<Tracked<Entity>>),
+    Func(Anot<Identifier, Type>),
+    Builtin(Anot<Identifier, Type>),
+    Lambda(Vec<Anot<Identifier, Type>>, Box<Tracked<Entity>>),
 }
 
 impl fmt::Display for Callable {
@@ -15,7 +14,12 @@ impl fmt::Display for Callable {
             Callable::Func(ident) => write!(
                 f,
                 "{}:{}",
-                ident.path.last().map(|a| a.as_str()).unwrap_or("self"),
+                ident
+                    .inner
+                    .path
+                    .last()
+                    .map(|a| a.as_str())
+                    .unwrap_or("self"),
                 ident
             ),
             Callable::Builtin(ident) => write!(f, "builtin:{}", ident),
@@ -35,10 +39,10 @@ impl fmt::Display for Callable {
 
 #[derive(Clone, Debug)]
 pub enum Passable {
-    Func(Identifier<Type>),
+    Func(Anot<Identifier, Type>),
     Value(Inlinable),
     PartialFunc(Callable, Vec<Tracked<Entity>>),
-    Lambda(Vec<Identifier<Type>>, Box<Tracked<Entity>>),
+    Lambda(Vec<Anot<Identifier, Type>>, Box<Tracked<Entity>>),
 }
 
 impl fmt::Display for Passable {
@@ -79,11 +83,11 @@ pub enum Entity {
         Box<Tracked<Entity>>,
     ),
     First(Vec<Tracked<Entity>>),
-    Record(Identifier<Type>, Vec<(String, Tracked<Entity>)>),
-    Lambda(Vec<Identifier<Type>>, Box<Tracked<Entity>>),
+    Record(Anot<Identifier, Type>, Vec<(String, Tracked<Entity>)>),
+    Lambda(Vec<Anot<Identifier, Type>>, Box<Tracked<Entity>>),
     List(Vec<Tracked<Entity>>),
     Inlined(Inlinable),
-    SingleIdent(Identifier<Type>),
+    SingleIdent(Anot<Identifier, Type>),
 
     // TODO: I want to add some meta info here so I can actually decribe what's unimplemented.
     // Is it root of function? Print that the entire function is implemented. Is just an if branch?

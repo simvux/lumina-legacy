@@ -1,5 +1,5 @@
 use super::{
-    ast, ast::Identifiable, tokenizer::Operator, FileSource, Identifier, IdentifierType, Key,
+    ast, ast::Identifiable, tokenizer::Operator, Anot, FileSource, Identifier, IdentifierType, Key,
     MaybeType, Parser, RawToken, Tracked, Type,
 };
 use std::convert::Into;
@@ -111,11 +111,11 @@ pub enum ParseFault {
     InvalidIdentifier(String, IdentSource),
     InvalidPath(Vec<String>),
     BridgedWrongPathLen(Vec<String>),
-    BridgedFunctionNotFound(Identifier<Type>),
+    BridgedFunctionNotFound(Anot<String, Type>),
     BridgedFunctionNoMode(u8),
     ParameterlessLambda,
-    TypeNotFound(usize, Identifier<Type>),
-    RecordWithEnum(usize, Identifier<Type>),
+    TypeNotFound(usize, Anot<Identifier, Type>),
+    RecordWithEnum(usize, Anot<Identifier, Type>),
     Unexpected(RawToken),
     UnexpectedWantedParameter(RawToken),
     Unmatched(Key),
@@ -152,10 +152,10 @@ pub enum ParseFault {
     EmptyListType,
     ListEntryTypeMismatch(Type, Type, usize),
     FnTypeReturnMismatch(Box<ast::Meta>, Type),
-    FunctionNotFound(Identifier<Type>, usize),
-    FunctionVariantNotFound(Identifier<Type>, Vec<MaybeType>, usize),
+    FunctionNotFound(Anot<Identifier, Type>, usize),
+    FunctionVariantNotFound(Anot<Identifier, Type>, Vec<MaybeType>, usize),
     FunctionConversionRequiresAnnotation(
-        Identifier<Type>,
+        Anot<Identifier, Type>,
         std::collections::HashMap<Vec<Type>, usize>,
     ),
     IdentifierNotFound(String),
@@ -165,7 +165,9 @@ pub enum ParseFault {
 #[derive(Debug)]
 pub enum IdentSource {
     Module,
+    TypeName,
     FunctionDeclName,
+    Operator,
     Ident,
 }
 
@@ -223,11 +225,11 @@ impl fmt::Display for ParseError {
             BridgedWrongPathLen(entries) => write!(f, "`{}` wrong length of path", entries.join(":")),
             BridgedFunctionNotFound(ident) => write!(f, "No bridged function named `{}`", ident),
             BridgedFunctionNoMode(c) => write!(f, "Bridged path mode doesn't exist, got `{}`", c),
-            TypeNotFound(_fid, ident) => write!(f, "Type `{}` not found", ident.name),
+            TypeNotFound(_fid, ident) => write!(f, "Type `{}` not found", ident.inner.name),
             RecordWithEnum(_fid, ident) => write!(f, "You're trying to construct a record however, `{}` is an enum and not a struct", ident),
             FunctionConversionRequiresAnnotation(ident, variants) => {
                 write!(f, "This function conversion requires a type annotation. I don't know which of these variants to use.\n  {}", variants.keys().map(|params| {
-                    format_function_header(&ident.name, Some(params), NO)
+                    format_function_header(&ident.inner.name, Some(params), NO)
                 }).collect::<Vec<_>>().join("\n  "))
             }
             ParamCallMismatch(box (takes, _gives, got)) => {
@@ -345,22 +347,22 @@ impl fmt::Display for ParseError {
                                 "Type mismatch. Wanted `{}` but got {}\n {}\n {}",
                                 wanted_params[i],
                                 params[i],
-                                format_header(&ident.name, ident.kind.clone(), Some(params), None),
-                                format_header(&wfuncb.name.name, ident.kind.clone(), Some(wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()) ,None),
+                                format_header(&ident.inner.name, ident.inner.kind.clone(), Some(params), None),
+                                format_header(&wfuncb.name.inner.name, ident.inner.kind.clone(), Some(wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()) ,None),
                             )
                         } else {
                             write!(f, "No function named `{}` takes these parameters\n  {}\n perhaps you meant to use?\n  {}",
-                                &ident.name,
-                                format_header(&ident.name, ident.kind.clone(), Some(&params), None),
-                                format_header(&wfuncb.name.name, ident.kind.clone(), Some(&wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None),
+                                &ident.inner.name,
+                                format_header(&ident.inner.name, ident.inner.kind.clone(), Some(&params), None),
+                                format_header(&wfuncb.name.inner.name, ident.inner.kind.clone(), Some(&wanted_params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None),
                                 )
                         }
                     }
                     _ => {
                         write!(f, "No function named `{}` takes these parameters\n  {}\n i did however find these variants\n  {}",
-                            &ident.name,
-                            format_header(&ident.name, ident.kind.clone(), Some(params.as_slice()), None),
-                            variants.keys().map(|params| format_header(&ident.name, ident.kind.clone(), Some(params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None)).collect::<Vec<String>>().join("\n  ")
+                            &ident.inner.name,
+                            format_header(&ident.inner.name, ident.inner.kind.clone(), Some(params.as_slice()), None),
+                            variants.keys().map(|params| format_header(&ident.inner.name, ident.inner.kind.clone(), Some(params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None)).collect::<Vec<String>>().join("\n  ")
                             )
                     },
                 }
@@ -388,6 +390,8 @@ impl fmt::Display for ParseError {
                 match identsource {
                     IdentSource::Module => write!(f, "for a module name"),
                     IdentSource::FunctionDeclName => write!(f, "for a function"),
+                    IdentSource::Operator => write!(f, "for an operator"),
+                    IdentSource::TypeName => write!(f, "for a type name"),
                     IdentSource::Ident => Ok(()),
                 }
             },
@@ -427,7 +431,7 @@ impl fmt::Display for ParseError {
                 // let p_types = funcb.parameter_types.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>();
                 write!(f, "This function returns the wrong value. Acording to its type signature it should return `{}`\n  {}\nbut instead it returns `{}`",
                 meta.return_type,
-                format_header(&meta.ident.name, meta.ident.kind.clone(),
+                format_header(&meta.ident.inner.name, meta.ident.inner.kind.clone(),
                 if p_types.is_empty() { 
                     None 
                 } else { 
