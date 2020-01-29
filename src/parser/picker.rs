@@ -10,9 +10,9 @@ impl Parser {
         params: &[MaybeType],
     ) -> Result<(usize, usize), ParseFault> {
         let variants = self.functions_named(self_fid, ident)?;
-        let mut matches = matches_of(variants, |got| {
+        let mut matches = variants.keeping(|fid, got| {
             if got.len() == params.len() {
-                are_compatible(params, got)
+                self.are_compatible(params, got)
             } else {
                 false
             }
@@ -66,25 +66,24 @@ impl Parser {
     ) -> Result<(usize, usize), ParseFault> {
         let variants = self.functions_named(self_fid, ident)?;
 
-        let mut matches = matches_of(variants, |got| got.len() >= atleast_params);
+        // let mut matches = matches_of(variants, |got| got.len() >= atleast_params);
+        let mut matches = variants.keeping(|_, got| got.len() >= atleast_params);
+        assert!(!matches.is_empty());
         let use_match = matches.remove(0);
 
-        if matches.len() > 1 {
+        if !matches.is_empty() {
             panic!("Need type annotation");
-        } else if matches.is_empty() {
-            panic!("Function variant not found");
         }
 
         Ok(use_match)
     }
 
-    // All variants in all reachable modules matching the function name
     pub fn functions_named<'a>(
         &'a self,
         self_fid: usize,
         ident: &Anot<Identifier, Type>,
-    ) -> Result<Variants<'a>, ParseFault> {
-        let mut all_variants = Vec::new();
+    ) -> Result<Variants, ParseFault> {
+        let mut all_variants = Variants::default();
 
         let fid = match ident.inner.path.len() {
             0 => {
@@ -113,9 +112,9 @@ impl Parser {
         let module = &self.modules[fid];
 
         if let Some(variants) = module.function_ids.get(&ident.inner.name) {
-            all_variants.push((fid, variants))
+            self.gather_to_and_deserialize(fid, &mut all_variants, variants);
         };
-        if all_variants.is_empty() {
+        if all_variants.matching.is_empty() {
             return Err(ParseFault::FunctionNotFound(ident.clone(), self_fid));
         }
         Ok(all_variants)
@@ -150,80 +149,124 @@ impl Parser {
             _ => panic!("ET: Invalid path length"),
         }
     }
-}
 
-type Variants<'a> = Vec<(usize, &'a HashMap<Vec<Type>, usize>)>;
-
-fn matches_of(variants: Variants, check: impl Fn(&[Type]) -> bool) -> Vec<(usize, usize)> {
-    let mut matches = Vec::new();
-    for (fid, variants) in variants.iter() {
-        variants
-            .iter()
-            .filter(|(params, _)| check(params))
-            .for_each(|(_, funcid)| matches.push((*fid, *funcid)));
-    }
-    matches
-}
-
-fn are_compatible(want: &[MaybeType], got: &[Type]) -> bool {
-    if want.len() != got.len() {
-        return false;
-    }
-    let mut generics: HashMap<u8, Type> = HashMap::new();
-    want.iter().zip(got.iter()).all(|(want, got)| match want {
-        MaybeType::Infer(t) => {
-            if let Some(existing) = t.borrow().as_ref() {
-                return generic_cmp(&mut generics, existing, got);
-            }
-            let decoded = got.clone().decoded(&generics);
-            if let Type::Generic(_) = &decoded {
-                // We can't infer here.
-                return false;
-            }
-            true
+    fn are_compatible(&self, want: &[MaybeType], got: &[Type]) -> bool {
+        if want.len() != got.len() {
+            return false;
         }
-        MaybeType::Known(existing) => generic_cmp(&mut generics, existing, got),
-    })
-}
-
-fn generic_cmp(generics: &mut HashMap<u8, Type>, left: &Type, right: &Type) -> bool {
-    match &right {
-        Type::Generic(n) => {
-            if let Some(existing) = generics.get(n) {
-                existing == left
-            } else {
-                generics.insert(*n, left.clone());
-                true
-            }
-        }
-        Type::List(box Type::Generic(n)) => {
-            if let Some(existing) = generics.get(n) {
-                Type::List(Box::new(existing.clone())) == *left
-            } else if let Type::List(box left_inner_t) = left {
-                generics.insert(*n, left_inner_t.clone());
-                true
-            } else {
-                false
-            }
-        }
-        Type::Function(box (takes, gives)) => {
-            if let Type::Function(box (left_takes, left_gives)) = left {
-                if takes.len() != left_takes.len() {
+        let mut generics: HashMap<u8, Type> = HashMap::new();
+        want.iter().zip(got.iter()).all(|(want, got)| match want {
+            MaybeType::Infer(t) => {
+                if let Some(existing) = t.borrow().as_ref() {
+                    return self.generic_cmp(&mut generics, existing, got);
+                }
+                let decoded = got.clone().decoded(&generics);
+                if let Type::Generic(_) = &decoded {
+                    // We can't infer here.
                     return false;
                 }
-                let params_ok = takes
-                    .iter()
-                    .enumerate()
-                    .all(|(i, inner_right)| generic_cmp(generics, &left_takes[i], inner_right));
-                if !params_ok {
-                    return false;
-                }
-                generic_cmp(generics, left_gives, gives)
-            } else {
-                false
+                true
             }
+            MaybeType::Known(existing) => self.generic_cmp(&mut generics, existing, got),
+        })
+    }
+
+    fn generic_cmp(&self, generics: &mut HashMap<u8, Type>, left: &Type, right: &Type) -> bool {
+        match &right {
+            Type::Custom(ident) => {
+                panic!("Un-Deserialized custom type in comparison: {}", ident);
+            }
+            Type::Generic(n) => {
+                if let Some(existing) = generics.get(n) {
+                    existing == left
+                } else {
+                    generics.insert(*n, left.clone());
+                    true
+                }
+            }
+            Type::List(box Type::Generic(n)) => {
+                if let Some(existing) = generics.get(n) {
+                    Type::List(Box::new(existing.clone())) == *left
+                } else if let Type::List(box left_inner_t) = left {
+                    generics.insert(*n, left_inner_t.clone());
+                    true
+                } else {
+                    false
+                }
+            }
+            Type::Function(box (takes, gives)) => {
+                if let Type::Function(box (left_takes, left_gives)) = left {
+                    if takes.len() != left_takes.len() {
+                        return false;
+                    }
+                    let params_ok = takes.iter().enumerate().all(|(i, inner_right)| {
+                        self.generic_cmp(generics, &left_takes[i], inner_right)
+                    });
+                    if !params_ok {
+                        return false;
+                    }
+                    self.generic_cmp(generics, left_gives, gives)
+                } else {
+                    false
+                }
+            }
+            _ => *right == *left,
         }
-        _ => *right == *left,
+    }
+
+    // Take a Type collection, deserialize `Custom` types, add them to self.
+    fn gather_to_and_deserialize(
+        &self,
+        fid: usize,
+        variants: &mut Variants,
+        from: &HashMap<Vec<Type>, usize>,
+    ) {
+        from.iter().for_each(|(params, funcid)| {
+            let params = params
+                .iter()
+                .map(|t| self.destruct_custom_type(fid, t.clone()))
+                .collect();
+            match variants.matching.iter_mut().find(|(id, _)| fid == *id) {
+                Some((_, variants_this_module)) => {
+                    // Modify existing module
+                    variants_this_module.push((params, *funcid));
+                }
+                None => {
+                    // Add new module variants container
+                    variants.matching.push((fid, vec![(params, *funcid)]));
+                }
+            };
+        });
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Variants {
+    pub matching: Vec<(usize, Vec<(Vec<Type>, usize)>)>,
+}
+impl Variants {
+    fn for_each(&self, mut f: impl FnMut(usize, usize, &[Type])) {
+        self.matching.iter().for_each(|(fid, variants)| {
+            variants
+                .iter()
+                .for_each(|(takes, funcid)| f(*fid, *funcid, takes))
+        });
+    }
+
+    fn keeping(&self, mut predicate: impl FnMut(usize, &[Type]) -> bool) -> Vec<(usize, usize)> {
+        let mut matches = Vec::new();
+        self.for_each(|fid, funcid, types| {
+            if predicate(fid, types) {
+                matches.push((fid, funcid))
+            }
+        });
+        matches
+    }
+
+    fn join(&mut self, other: Self) {
+        for m in other.matching {
+            self.matching.push(m);
+        }
     }
 }
 

@@ -139,7 +139,7 @@ impl FunctionBuilder {
             let source_index = next.pos();
             match next.inner {
                 RawToken::Identifier(ident) => self.parameter_types.push(
-                    Type::try_from(ident.inner.name.as_str())
+                    Type::try_from(ident.inner.to_string().as_str())
                         .map_err(|e| e.into_err(source_index))?,
                 ),
                 RawToken::Key(Key::ListOpen) => self
@@ -266,9 +266,8 @@ impl FunctionBuilder {
         };
         let source_index = next.pos();
         let r#type = match next.inner {
-            RawToken::Identifier(ident) => {
-                Type::try_from(ident.inner.name.as_str()).map_err(|e| e.into_err(source_index))?
-            }
+            RawToken::Identifier(ident) => Type::try_from(ident.inner.to_string().as_str())
+                .map_err(|e| e.into_err(source_index))?,
             RawToken::Key(Key::ParenOpen) => {
                 Type::Function(Box::new(self.parse_param_type(tokenizer)?))
             }

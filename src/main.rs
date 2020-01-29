@@ -99,8 +99,8 @@ fn run(env: Rc<Environment>) -> Result<ir::Value, ParseError> {
     }
 
     if env.output.ir {
-        for entity in runtime.instructions.iter() {
-            println!("{}", entity);
+        for (i, entity) in runtime.instructions.iter().enumerate() {
+            println!("{}: {}", i, entity);
         }
     }
     drop(env);

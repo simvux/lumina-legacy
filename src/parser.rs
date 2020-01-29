@@ -305,6 +305,28 @@ impl Parser {
             }
         }
     }
+
+    pub fn destruct_custom_type(&self, self_fid: usize, t: Type) -> Type {
+        if let Type::Custom(ident) = t {
+            dbg!(&ident, self_fid);
+            let fid = match ident.inner.path.last() {
+                None => self_fid,
+                Some(modname) => self.modules[self_fid]
+                    .imports
+                    .get(modname)
+                    .cloned()
+                    .expect("ET"),
+            };
+            let tid = self.modules[fid]
+                .type_ids
+                .get(&ident.inner.name)
+                .cloned()
+                .expect("ET");
+            Type::KnownCustom(fid, tid)
+        } else {
+            t
+        }
+    }
 }
 
 impl fmt::Debug for Parser {

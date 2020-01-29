@@ -141,22 +141,11 @@ impl<'a> Runner<'a> {
     }
 
     fn eval_params(&mut self, params: &'a [Entity]) -> ParamBuffer<'a> {
-        match params.len() {
-            0 => ParamBuffer::default(),
-            1 => {
-                let new_params = self.params.clone();
-                ParamBuffer::Owned(smallvec![self.spawn(
-                    &params[0],
-                    new_params,
-                    self.captured.clone()
-                )])
-            }
-            _ => ParamBuffer::from(
-                params
-                    .iter()
-                    .map(|p| self.spawn(p, self.params.clone(), self.captured.clone())),
-            ),
-        }
+        ParamBuffer::from(
+            params
+                .iter()
+                .map(|p| self.spawn(p, self.params.clone(), self.captured.clone())),
+        )
     }
 
     fn record(self, fields: &'a [Entity]) -> Value {

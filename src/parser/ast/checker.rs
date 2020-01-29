@@ -84,9 +84,15 @@ impl<'a> IrBuilder {
             .build(entry, &mut meta)
             .map_err(|e| e.fallback_fid(meta.fid))?;
         let t = t.unwrap();
-        if meta.return_type != Type::Nothing && t != meta.return_type {
+
+        let expected = self
+            .parser
+            .destruct_custom_type(meta.fid, meta.return_type.clone());
+        if expected != Type::Nothing && t != expected {
+            meta.return_type = expected;
             return Err(ParseFault::FnTypeReturnMismatch(Box::new(meta), t).into_err(entry.pos()));
         }
+        println!("{} fi{} -> {}", &meta.ident, findex, &ir);
 
         self.complete(findex, ir);
         Ok((t, findex))
@@ -357,7 +363,8 @@ impl<'a> IrBuilder {
                             evaluated_fields.push(ir);
                         }
                         let ir = ir::Entity::ConstructRecord(evaluated_fields);
-                        unimplemented!();
+                        let t = MaybeType::Known(Type::KnownCustom(fid, tid));
+                        Ok((t, ir))
                     }
                     CustomType::Enum(r#enum) => {
                         Err(ParseFault::RecordWithEnum(fid, ident.clone()).into_err(0))

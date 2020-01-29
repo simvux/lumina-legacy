@@ -316,8 +316,8 @@ impl fmt::Display for ParseError {
             }
             FunctionVariantNotFound(ident, params, fid) => {
                 // TODO: This only shows from one module. 
-                let (fid, variants) = parser.functions_named(*fid, ident).unwrap()[0];
-                let module = &parser.modules[fid];
+                let (fid, variants) = &parser.functions_named(*fid, ident).unwrap().matching[0];
+                let module = &parser.modules[*fid];
                 
                 match variants.len() {
                     1 => {
@@ -362,7 +362,7 @@ impl fmt::Display for ParseError {
                         write!(f, "No function named `{}` takes these parameters\n  {}\n i did however find these variants\n  {}",
                             &ident.inner.name,
                             format_header(&ident.inner.name, ident.inner.kind.clone(), Some(params.as_slice()), None),
-                            variants.keys().map(|params| format_header(&ident.inner.name, ident.inner.kind.clone(), Some(params.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None)).collect::<Vec<String>>().join("\n  ")
+                            variants.iter().map(|params| format_header(&ident.inner.name, ident.inner.kind.clone(), Some(params.0.iter().cloned().map(MaybeType::Known).collect::<Vec<_>>().as_slice()), None)).collect::<Vec<String>>().join("\n  ")
                             )
                     },
                 }

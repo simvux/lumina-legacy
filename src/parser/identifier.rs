@@ -20,7 +20,11 @@ impl Default for Identifier {
 }
 impl fmt::Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.name)
+        if self.path.is_empty() {
+            write!(f, "{}", self.name)
+        } else {
+            write!(f, "{}:{}", self.path.join(":"), self.name)
+        }
     }
 }
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]

@@ -47,6 +47,7 @@ pub enum Type {
     // Although how we're gonna get the fid in here I'm not quite sure. Might just need to change
     // TryFrom<&str> to TryFrom<(usize, &str)>.
     Custom(Anot<Identifier, Type>),
+    KnownCustom(usize, usize),
 }
 
 pub enum CustomType {
@@ -163,16 +164,8 @@ impl TryFrom<&str> for Type {
             "nothing" | "_" => Type::Nothing,
             "bool" => Type::Bool,
             _ => {
-                let mut path = tbuf.split(':').map(|s| s.to_owned()).collect::<Vec<_>>();
-                let name = path.pop().unwrap();
-                Type::Custom(Anot::from((
-                    Identifier {
-                        name,
-                        path,
-                        kind: IdentifierType::Normal,
-                    },
-                    anot,
-                )))
+                // TODO: This tbuf.as_str() causes an unessesarry allocation
+                Type::Custom(Anot::from((Identifier::try_from(tbuf.as_str())?, anot)))
             }
         };
         Ok(t)
@@ -289,6 +282,7 @@ impl fmt::Display for Type {
             Type::List(inner) => write!(f, "[{}]", inner.to_string()),
             Type::Struct(fid, tid) => write!(f, "Struct({}:{})", fid, tid),
             Type::Custom(name) => write!(f, "unevaluated type {}", name),
+            Type::KnownCustom(fid, name) => write!(f, "{}:{}", fid, name),
         }
     }
 }

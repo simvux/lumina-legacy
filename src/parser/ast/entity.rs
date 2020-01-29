@@ -11,17 +11,7 @@ pub enum Callable {
 impl fmt::Display for Callable {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Callable::Func(ident) => write!(
-                f,
-                "{}:{}",
-                ident
-                    .inner
-                    .path
-                    .last()
-                    .map(|a| a.as_str())
-                    .unwrap_or("self"),
-                ident
-            ),
+            Callable::Func(ident) => write!(f, "{}", ident),
             Callable::Builtin(ident) => write!(f, "builtin:{}", ident),
             Callable::Lambda(param_names, body) => write!(
                 f,
