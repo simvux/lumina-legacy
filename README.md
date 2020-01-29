@@ -206,3 +206,4 @@ The project is not yet in an usable state but we're getting there!
  - [x] Add a way to create platform-specific code
  - [ ] Unit testing
  - [ ] Multi-layered errors
+ - [ ] Custom types display their deserialized version in errors. Ignoring this for now since I'm probably gonna refactor this part of types soon anyways
