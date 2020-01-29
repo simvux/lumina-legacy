@@ -10,7 +10,7 @@ impl Parser {
         params: &[MaybeType],
     ) -> Result<(usize, usize), ParseFault> {
         let variants = self.functions_named(self_fid, ident)?;
-        let mut matches = variants.keeping(|fid, got| {
+        let mut matches = variants.keeping(|_, got| {
             if got.len() == params.len() {
                 self.are_compatible(params, got)
             } else {
