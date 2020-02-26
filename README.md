@@ -1,3 +1,5 @@
+## NOTE: This project is currently being partially reworked locally, and this repository is on hold until the new version is ready to replace it
+
 # Leaf - A High-Level Interpreted Functional Programming Language
 
    * [Introduction](#introduction)
